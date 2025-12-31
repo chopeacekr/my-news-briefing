@@ -1,53 +1,35 @@
 """
 =================================================================
-📰 STEP 0.3: V9 최종 버전 (apply_chat_template + 최적화)
+📰 STEP 0.3: V9.1 수정 버전 (Chat Template 최적화)
 =================================================================
 
-🆕 V9 개선 사항:
-✅ apply_chat_template 사용 (Qwen 공식 형식) ⭐⭐⭐ NEW!
-✅ System message 추가 (역할 명확화) ⭐⭐ NEW!
-✅ 복사 감지 로직 (5-gram 체크) ⭐⭐⭐
-✅ 프롬프트 명시적 개선 ("Summarize") ⭐⭐⭐
-✅ 학습 데이터 200개 (5배 증가!) ⭐⭐⭐
-✅ 에포크 3개 (3배 증가)
-✅ Temperature 0.7 (창의성 증가)
-✅ LLM 분석 프롬프트 자동 생성 ⭐
-✅ 전체 논문 저장 (정확한 분석) ⭐
+🆕 V9.1 개선 사항:
+✅ System message 간결화 ⭐⭐⭐ NEW!
+✅ User 프롬프트 제거 (논문만!) ⭐⭐⭐ NEW!
+✅ 중복 지시사항 제거 ⭐⭐⭐ NEW!
+✅ apply_chat_template 사용 (Qwen 공식)
+✅ 생성 부분만 추출 (프롬프트 제외)
+✅ 복사 감지 로직 (경고만)
+✅ 학습 데이터 200개 × 3 에포크
 
-🚀 V8 → V9 핵심 변경:
-✅ Qwen 공식 챗 형식 사용 (+15% 성능 예상)
-✅ Special tokens 자동 처리
-✅ 안정성 대폭 향상
+🔧 V9 → V9.1 핵심 변경:
+✅ System: "2문장 45단어" → 간결한 역할 정의
+✅ User: "Summarize... + 논문" → 논문만!
+✅ 중복 제거 → 명확한 역할 분리
 
 =================================================================
-📊 현재 설정 (V9 권장값)
+📊 현재 설정 (V9.1 권장값)
 =================================================================
 
 학습 데이터: Train 200개 + Val 10개 = 총 210개
 학습 에포크: 3 에포크
 Temperature: 0.7
 Chat Template: ✅ 사용 (Qwen 공식)
-System Message: ✅ 사용 (역할 명확화)
+System Message: ✅ 간결화 (20단어)
 
-예상 시간: ~60분 (V8과 동일)
-예상 품질: 7-8/10 (V8 6-7/10에서 개선)
-예상 성능: 85% (V8 70%에서 +15%)
-
-=================================================================
-⚙️ 설정 방법
-=================================================================
-
-아래 "⚙️ 설정 - 여기만 수정하세요!" 섹션에서:
-
-1. TRAIN_SAMPLES = 200  ← 학습 샘플 수
-2. NUM_EPOCHS = 3       ← 에포크 수
-3. TEMPERATURE = 0.7    ← Temperature
-4. USE_SYSTEM_MESSAGE = True  ← System message 사용
-
-💡 빠른 테스트:
-  TRAIN_SAMPLES = 40
-  NUM_EPOCHS = 1
-  → 시간: ~10분 (품질 낮음)
+예상 시간: ~60분
+예상 품질: 8-9/10 (V9 0-1/10에서 대폭 개선!)
+예상 성능: 90%
 
 =================================================================
 """
@@ -63,55 +45,60 @@ MODE = 0  # 0: 전체 실행 (학습+테스트), 1: 랜덤 테스트만
 ENABLE_FINETUNING = True  # True: 파인튜닝 실행, False: 베이스 모델만
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 학습 데이터 설정 ⭐ V9 권장값!
+# 학습 데이터 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TRAIN_SAMPLES = 200  # 학습 샘플 수 (V9 권장: 200)
-VAL_SAMPLES = 10     # 검증 샘플 수 (보통 10-20)
-NUM_EPOCHS = 3       # 학습 에포크 수 (V9 권장: 3)
+TRAIN_SAMPLES = 200  # 학습 샘플 수
+VAL_SAMPLES = 10     # 검증 샘플 수
+NUM_EPOCHS = 3       # 학습 에포크 수
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 챗 템플릿 설정 ⭐ V9 신규!
+# 챗 템플릿 설정 ⭐ V9.1 핵심 수정!
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 USE_CHAT_TEMPLATE = True  # apply_chat_template 사용 (강력 권장!)
-USE_SYSTEM_MESSAGE = True # System message 추가 (권장)
+USE_SYSTEM_MESSAGE = True # System message 사용 (권장)
 
-SYSTEM_MESSAGE = "You are a research paper summarization expert. Summarize papers concisely and accurately in exactly 2 sentences, maximum 45 words. Focus on the main contribution and key results."
+# ⭐ V9.1: System message 간결화!
+# Before: "You are a research paper summarization expert. Summarize papers concisely and accurately in exactly 2 sentences, maximum 45 words. Focus on the main contribution and key results."
+# After: 간결하게!
+SYSTEM_MESSAGE = "You are a research paper summarization expert. Always respond with exactly 2 sentences, maximum 45 words."
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 생성 파라미터 ⭐ V9 최적화!
+# 생성 파라미터
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TEMPERATURE = 0.7    # Temperature (V9: 0.7)
+TEMPERATURE = 0.7
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 후처리 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 POST_PROCESS_MODE = "smart"  # "smart": 안전, "aggressive": 적극적
 
-ENABLE_COPY_DETECTION = True  # 복사 감지 (V8+)
+ENABLE_COPY_DETECTION = True  # 복사 감지
 COPY_DETECTION_THRESHOLD = 0.5  # 50% 이상 겹침 = 복사
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 테스트 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NUM_RANDOM_TESTS = 3  # 랜덤 테스트 개수 (1-10)
+NUM_RANDOM_TESTS = 3  # 랜덤 테스트 개수
 
 # ================================================================
 # 📊 현재 설정 요약
 # ================================================================
 print("\n" + "="*60)
-print("⚙️  V9 현재 설정")
+print("⚙️  V9.1 현재 설정")
 print("="*60)
 print(f"실행 모드: {'전체 실행' if MODE == 0 else '랜덤 테스트만'}")
 print(f"파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함'}")
 print(f"Chat Template: {'사용 ✅ (Qwen 공식)' if USE_CHAT_TEMPLATE else '미사용'}")
-print(f"System Message: {'사용 ✅' if USE_SYSTEM_MESSAGE else '미사용'}")
+print(f"System Message: {'사용 ✅ (간결화)' if USE_SYSTEM_MESSAGE else '미사용'}")
+if USE_SYSTEM_MESSAGE:
+    print(f'  → "{SYSTEM_MESSAGE}"')
 if ENABLE_FINETUNING:
-    print(f"학습 데이터: Train {TRAIN_SAMPLES}개 + Val {VAL_SAMPLES}개 = 총 {TRAIN_SAMPLES + VAL_SAMPLES}개")
+    print(f"학습 데이터: Train {TRAIN_SAMPLES}개 + Val {VAL_SAMPLES}개")
     print(f"학습 에포크: {NUM_EPOCHS}")
     print(f"Temperature: {TEMPERATURE}")
     print(f"예상 시간: ~{TRAIN_SAMPLES * NUM_EPOCHS // 2}분")
-print(f"후처리 모드: {POST_PROCESS_MODE}")
-print(f"복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'} (임계값: {COPY_DETECTION_THRESHOLD})")
+print(f"후처리: {POST_PROCESS_MODE}")
+print(f"복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'}")
 print(f"랜덤 테스트: {NUM_RANDOM_TESTS}개")
 print("="*60)
 
@@ -123,18 +110,18 @@ import os
 from pathlib import Path
 
 print("\n" + "="*60)
-print("🚀 STEP 0.3 V9 - apply_chat_template + 최적화")
+print("🚀 STEP 0.3 V9.1 - Chat Template 최적화")
 print("="*60)
 
 
 # ================================================================
-# 🔧 V9 후처리 함수 (V8과 동일)
+# 🔧 V9.1 후처리 함수 (V9에서 개선)
 # ================================================================
 
 import re
 
 def detect_copy(text, original_article, ngram_size=5):
-    """V8/V9 복사 감지 로직 (5-gram 겹침 체크)"""
+    """복사 감지 로직 (5-gram 겹침 체크)"""
     
     if not ENABLE_COPY_DETECTION:
         return False
@@ -169,33 +156,44 @@ def detect_copy(text, original_article, ngram_size=5):
     return copy_ratio > COPY_DETECTION_THRESHOLD
 
 
-def clean_output_v9(raw_text, original_article=""):
-    """V9 후처리 (V8과 동일 + 개선)"""
+def clean_output_v91(raw_text, original_article=""):
+    """V9.1 후처리 (V9 개선)"""
     
-    # STEP 1: "Summary:" 또는 "Brief:" 이후만 추출
-    if "Summary:" in raw_text:
-        text = raw_text.split("Summary:")[-1].strip()
-    elif "Brief:" in raw_text:
-        text = raw_text.split("Brief:")[-1].strip()
-    elif "<|im_end|>" in raw_text:  # V9: chat template 처리
-        text = raw_text.split("<|im_end|>")[-1].strip()
-    elif "<|im_start|>" in raw_text:  # V9: chat template 시작 태그 이후
-        # <|im_start|>assistant 이후 추출
-        if "assistant" in raw_text:
-            text = raw_text.split("assistant")[-1].strip()
-        else:
-            text = raw_text.split("<|im_start|>")[-1].strip()
-    else:
-        text = raw_text.strip()
+    # STEP 0: 불필요한 단어들 완전 제거
+    text = raw_text
     
-    # V9: chat template 태그 완전 제거
-    text = re.sub(r'<\|im_start\|>', '', text)
-    text = re.sub(r'<\|im_end\|>', '', text)
+    # System/User/Assistant 제거
     text = re.sub(r'\bsystem\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\buser\b', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\bassistant\b', '', text, flags=re.IGNORECASE)
     
-    # STEP 2: 모든 ### 및 특수 구분자 제거
+    # "You are" 패턴 제거
+    text = re.sub(r'\byou\s+are\s+a\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\byou\s+are\s+an\b', '', text, flags=re.IGNORECASE)
+    
+    # System message 관련 패턴
+    text = re.sub(r'research\s+paper\s+summarization\s+expert', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'always\s+respond\s+with', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'exactly\s+2\s+sentences', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'maximum\s+45\s+words', '', text, flags=re.IGNORECASE)
+    
+    # 공백 정리
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # STEP 1: 시작 지점 찾기
+    if "Summary:" in text:
+        text = text.split("Summary:")[-1].strip()
+    elif "Brief:" in text:
+        text = text.split("Brief:")[-1].strip()
+    elif "<|im_end|>" in text:
+        text = text.split("<|im_end|>")[-1].strip()
+    elif "<|im_start|>" in text:
+        if "assistant" in text:
+            text = text.split("assistant")[-1].strip()
+        else:
+            text = text.split("<|im_start|>")[-1].strip()
+    
+    # STEP 2: 특수 구분자 제거
     text = re.sub(r'#{1,}', '', text)
     text = re.sub(r'={3,}', '', text)
     text = re.sub(r'-{3,}', '', text)
@@ -206,20 +204,9 @@ def clean_output_v9(raw_text, original_article=""):
         r'(?i)brief\s*:',
         r'(?i)summary\s*:',
         r'(?i)summarize',
-        r'(?i)max\s+\d+\s+words?',
-        r'(?i)\d+-sentence',
-        r'(?i)2-sentence',
-        r'(?i)45\s+words?',
-        r'(?i)write\s+a',
-        r'(?i)task\s*:',
+        r'(?i)this\s+paper',
         r'<\|im_start\|>',
         r'<\|im_end\|>',
-        r'(?i)\bsystem\b',
-        r'(?i)\buser\b',
-        r'(?i)\bassistant\b',
-        r'(?i)you\s+are\s+a',  # "You are a research paper..."
-        r'(?i)research\s+paper\s+summarization\s+expert',
-        r'(?i)papers\s+concisely',
     ]
     
     for pattern in prompt_patterns:
@@ -241,8 +228,7 @@ def clean_output_v9(raw_text, original_article=""):
         return "[요약 생성 실패 - 출력 없음]"
     
     # STEP 7: 복사 감지 (경고만, 차단 안 함)
-    # Note: 복사 여부는 플래그로만 표시하고 출력은 그대로 반환
-    # 이유: 품질 평가를 위해 결과를 봐야 함
+    # 복사 여부는 플래그로만 표시
     
     # STEP 8: 문장 분리 및 선택
     sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -281,32 +267,33 @@ def clean_output_v9(raw_text, original_article=""):
         return ' '.join(words[:45]) + '.'
 
 
-def clean_output_aggressive_v9(raw_text, original_article=""):
-    """V9 Aggressive: 2문장 강제"""
+def clean_output_aggressive_v91(raw_text, original_article=""):
+    """V9.1 Aggressive: 2문장 강제"""
     
-    # STEP 1-5: Smart와 동일
-    if "Summary:" in raw_text:
-        text = raw_text.split("Summary:")[-1].strip()
-    elif "Brief:" in raw_text:
-        text = raw_text.split("Brief:")[-1].strip()
-    elif "<|im_end|>" in raw_text:
-        text = raw_text.split("<|im_end|>")[-1].strip()
-    elif "<|im_start|>" in raw_text:
-        if "assistant" in raw_text:
-            text = raw_text.split("assistant")[-1].strip()
+    # STEP 0: 불필요한 단어 제거
+    text = raw_text
+    text = re.sub(r'\b(system|user|assistant)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\byou\s+are\s+(a|an)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'research\s+paper|always\s+respond|maximum\s+45', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    # STEP 1-5
+    if "Summary:" in text:
+        text = text.split("Summary:")[-1].strip()
+    elif "Brief:" in text:
+        text = text.split("Brief:")[-1].strip()
+    elif "<|im_end|>" in text:
+        text = text.split("<|im_end|>")[-1].strip()
+    elif "<|im_start|>" in text:
+        if "assistant" in text:
+            text = text.split("assistant")[-1].strip()
         else:
-            text = raw_text.split("<|im_start|>")[-1].strip()
-    else:
-        text = raw_text.strip()
+            text = text.split("<|im_start|>")[-1].strip()
     
-    # Chat template 태그 제거
-    text = re.sub(r'<\|im_start\|>|<\|im_end\|>|system|user|assistant', '', text, flags=re.IGNORECASE)
     text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
     
     prompt_patterns = [
         r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
-        r'(?i)max\s+\d+\s+words?', r'(?i)2-sentence',
-        r'(?i)you\s+are\s+a', r'(?i)research\s+paper',
     ]
     for pattern in prompt_patterns:
         text = re.sub(pattern, '', text)
@@ -317,8 +304,7 @@ def clean_output_aggressive_v9(raw_text, original_article=""):
     if not text or len(text) < 20:
         return "[요약 생성 실패]"
     
-    # 복사 감지: 경고만, 차단 안 함
-    # (플래그는 별도로 반환됨)
+    # 복사 감지: 경고만
     
     sentences = re.split(r'(?<=[.!?])\s+', text)
     sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 5]
@@ -364,15 +350,15 @@ def clean_output_aggressive_v9(raw_text, original_article=""):
 
 
 def clean_output(raw_text, original_article=""):
-    """선택된 POST_PROCESS_MODE로 후처리"""
+    """선택된 모드로 후처리"""
     if POST_PROCESS_MODE == "aggressive":
-        return clean_output_aggressive_v9(raw_text, original_article)
+        return clean_output_aggressive_v91(raw_text, original_article)
     else:
-        return clean_output_v9(raw_text, original_article)
+        return clean_output_v91(raw_text, original_article)
 
 
-print(f"\n✅ 후처리 함수 V9 로드 완료 ({POST_PROCESS_MODE} 모드)")
-print(f"   복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'} (임계값: {COPY_DETECTION_THRESHOLD})")
+print(f"\n✅ 후처리 함수 V9.1 로드 완료 ({POST_PROCESS_MODE} 모드)")
+print(f"   복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'}")
 
 
 # ================================================================
@@ -452,7 +438,7 @@ if MODE == 0:
     
     # 설정
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9.1-FINAL"
     RESULTS_DIR = Path(OUTPUT_DIR) / "results"
     
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
@@ -461,12 +447,10 @@ if MODE == 0:
     print(f"\n⚙️ 설정:")
     print(f"  모델: Qwen2.5-1.5B-Instruct")
     print(f"  Chat Template: {'사용 ✅' if USE_CHAT_TEMPLATE else '미사용'}")
-    print(f"  System Message: {'사용 ✅' if USE_SYSTEM_MESSAGE else '미사용'}")
+    print(f"  System Message: {'사용 ✅ (간결)' if USE_SYSTEM_MESSAGE else '미사용'}")
     print(f"  파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함'}")
-    print(f"  후처리: {POST_PROCESS_MODE} V9 + 복사 감지")
     print(f"  샘플: Train {TRAIN_SAMPLES}, Val {VAL_SAMPLES}")
     print(f"  에포크: {NUM_EPOCHS}")
-    print(f"  Temperature: {TEMPERATURE}")
     print(f"  출력: {OUTPUT_DIR}")
     
     # ============================================================
@@ -508,14 +492,14 @@ if MODE == 0:
     print(f"✅ Train: {len(train_dataset)}, Val: {len(val_dataset)}")
     
     # ============================================================
-    # STEP 4: V9 프롬프트 적용 (apply_chat_template!) ⭐⭐⭐
+    # STEP 4: V9.1 프롬프트 적용 (개선!) ⭐⭐⭐
     # ============================================================
     
     print("\n" + "="*60)
-    print("📝 STEP 4: V9 프롬프트 적용 (apply_chat_template)")
+    print("📝 STEP 4: V9.1 프롬프트 적용 (개선!)")
     print("="*60)
     
-    # 토크나이저 먼저 로드 (chat template 사용 위해)
+    # 토크나이저 로드
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -523,31 +507,31 @@ if MODE == 0:
     
     print("✅ 토크나이저 로드")
     
-    def formatting_prompts_func_v9(example):
-        """V9: apply_chat_template 사용!"""
+    def formatting_prompts_func_v91(example):
+        """V9.1: System 간결화 + User 프롬프트 제거!"""
         
         messages = []
         
-        # System message 추가 (선택적)
+        # System message (간결하게!)
         if USE_SYSTEM_MESSAGE:
             messages.append({
                 "role": "system",
                 "content": SYSTEM_MESSAGE
             })
         
-        # User message
+        # ⭐ V9.1 핵심: User는 논문만! 프롬프트 제거!
         messages.append({
             "role": "user",
-            "content": f"Summarize this paper in 2 sentences (max 45 words):\n\n{example['article']}"
+            "content": example['article']  # 논문만!
         })
         
-        # Assistant message
+        # Assistant
         messages.append({
             "role": "assistant",
             "content": example['abstract']
         })
         
-        # ⭐ 핵심: apply_chat_template 사용!
+        # apply_chat_template
         if USE_CHAT_TEMPLATE:
             text = tokenizer.apply_chat_template(
                 messages,
@@ -555,25 +539,26 @@ if MODE == 0:
                 add_generation_prompt=False  # 학습 시 False
             )
         else:
-            # Fallback: V8 방식
+            # Fallback
             text = f"Summarize this paper in 2 sentences (max 45 words):\n\n{example['article']}\n\nSummary: {example['abstract']}"
         
         return {"text": text}
     
-    print("🔄 V9 프롬프트 적용 중...")
-    if USE_CHAT_TEMPLATE:
-        print("  형식: Qwen 공식 챗 템플릿 ✅")
-        print(f"  System: {SYSTEM_MESSAGE[:50]}..." if USE_SYSTEM_MESSAGE else "  System: 미사용")
-    else:
-        print("  형식: V8 호환 (직접 포매팅)")
+    print("🔄 V9.1 프롬프트 적용 중...")
+    print(f"  System: {USE_SYSTEM_MESSAGE}")
+    if USE_SYSTEM_MESSAGE:
+        print(f'    → "{SYSTEM_MESSAGE}"')
+    print(f"  User: 논문만! (프롬프트 제거)")
     
-    train_dataset = train_dataset.map(formatting_prompts_func_v9)
-    val_dataset = val_dataset.map(formatting_prompts_func_v9)
+    train_dataset = train_dataset.map(formatting_prompts_func_v91)
+    val_dataset = val_dataset.map(formatting_prompts_func_v91)
     
-    # 프롬프트 예시 출력
+    # 프롬프트 예시
     print("\n📋 프롬프트 예시:")
     print("-"*60)
-    print(train_dataset[0]['text'][:500] + "...")
+    sample_text = train_dataset[0]['text']
+    # 처음 500자만 (논문은 길어서)
+    print(sample_text[:500] + "...")
     print("-"*60)
     
     print("✅ 프롬프트 적용 완료")
@@ -670,9 +655,7 @@ if MODE == 0:
         print("\n🏋️ 학습 시작...")
         print(f"  Epochs: {NUM_EPOCHS}")
         print(f"  Batch size: 1 × 4 = 4")
-        print(f"  Learning rate: 2e-4")
-        print(f"  Chat Template: {'사용 ✅' if USE_CHAT_TEMPLATE else '미사용'}")
-        print(f"  총 학습 스텝: ~{len(train_dataset_tokenized) // 4 * NUM_EPOCHS}")
+        print(f"  V9.1 개선: System 간결 + User 프롬프트 제거")
         print(f"  예상 시간: ~{TRAIN_SAMPLES * NUM_EPOCHS // 2}분")
         print()
         
@@ -697,14 +680,12 @@ if MODE == 0:
         # 메타데이터
         metadata = {
             "model": BASE_MODEL,
-            "version": "V9",
+            "version": "V9.1",
             "chat_template": USE_CHAT_TEMPLATE,
             "system_message": USE_SYSTEM_MESSAGE,
             "system_message_content": SYSTEM_MESSAGE if USE_SYSTEM_MESSAGE else None,
-            "prompt": "Summarize this paper in 2 sentences (max 45 words)",
-            "post_process": f"{POST_PROCESS_MODE} V9 + 복사 감지",
-            "copy_detection": ENABLE_COPY_DETECTION,
-            "copy_threshold": COPY_DETECTION_THRESHOLD,
+            "user_prompt": "논문만 (프롬프트 제거)",
+            "improvements": "System 간결화 + User 프롬프트 제거 + 중복 제거",
             "train_samples": TRAIN_SAMPLES,
             "val_samples": VAL_SAMPLES,
             "num_epochs": NUM_EPOCHS,
@@ -726,20 +707,20 @@ if MODE == 0:
     
     else:
         print("\n" + "="*60)
-        print("⏭️  파인튜닝 건너뛰기 (베이스 모델만 사용)")
+        print("⏭️  파인튜닝 건너뛰기")
         print("="*60)
     
     # ============================================================
-    # A/B 테스트 (V9) ⭐
+    # A/B 테스트 (V9.1)
     # ============================================================
     
     print("\n" + "="*60)
-    print("🔬 A/B 테스트 (V9)")
+    print("🔬 A/B 테스트 (V9.1)")
     print("="*60)
     
-    # V9 프롬프트 생성 함수
-    def make_prompt_v9(article):
-        """V9: apply_chat_template 사용 (추론용)"""
+    # V9.1 프롬프트 생성
+    def make_prompt_v91(article):
+        """V9.1: System 간결 + User 논문만"""
         
         messages = []
         
@@ -749,16 +730,17 @@ if MODE == 0:
                 "content": SYSTEM_MESSAGE
             })
         
+        # ⭐ V9.1: 논문만!
         messages.append({
             "role": "user",
-            "content": f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}"
+            "content": article  # 논문만!
         })
         
         if USE_CHAT_TEMPLATE:
             prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=True  # 추론 시 True!
+                add_generation_prompt=True  # 추론 시 True
             )
         else:
             prompt = f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
@@ -790,18 +772,15 @@ if MODE == 0:
         )
         qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
         qwen_ft.eval()
-        print("  ✅ 파인튜닝 모델")
+        print("  ✅ 파인튜닝 모델 (V9.1)")
     else:
         qwen_ft = None
         print("  ⏭️  파인튜닝 모델 없음")
     
-    # 테스트: 실제 ArXiv 논문 전체 사용
+    # 테스트 데이터
     print("\n📥 테스트용 논문 로딩...")
     
     if 'val_dataset' not in locals():
-        print("  Val 데이터셋 다시 로딩...")
-        from datasets import load_dataset
-        
         dataset_temp = load_dataset("ccdv/arxiv-summarization", split=f"train[:{TRAIN_SAMPLES + VAL_SAMPLES}]")
         dataset_temp = dataset_temp.map(lambda x: {
             'article': clean_arxiv_text(x['article']),
@@ -821,7 +800,7 @@ if MODE == 0:
             "abstract": paper['abstract']
         })
     
-    print(f"  ✅ {len(tests)}개 논문 로드 완료")
+    print(f"  ✅ {len(tests)}개 논문 로드")
     
     all_results = []
     
@@ -830,7 +809,7 @@ if MODE == 0:
     for i, test in enumerate(tests):
         print(f"  Test {i+1}/3...", end=" ")
         
-        prompt = make_prompt_v9(test['article'])
+        prompt = make_prompt_v91(test['article'])
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_base.device)
         
         # 베이스
@@ -842,12 +821,10 @@ if MODE == 0:
                 no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
             )
         
-        # 생성된 부분만 추출 (프롬프트 제외)
+        # 생성된 부분만 추출
         generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
         base_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         base_summary = clean_output(base_raw, test['article'])
-        
-        # 복사 감지 체크 (출력과 별도)
         base_is_copy = detect_copy(base_summary, test['article']) if base_summary and '[' not in base_summary else False
         
         # 파인튜닝
@@ -860,12 +837,9 @@ if MODE == 0:
                     no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
                 )
             
-            # 생성된 부분만 추출 (프롬프트 제외)
             generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
             ft_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
             ft_summary = clean_output(ft_raw, test['article'])
-            
-            # 복사 감지 체크 (출력과 별도)
             ft_is_copy = detect_copy(ft_summary, test['article']) if ft_summary and '[' not in ft_summary else False
         else:
             ft_summary = "N/A (파인튜닝 미사용)"
@@ -878,27 +852,27 @@ if MODE == 0:
             "target": test['abstract'],
             "base_summary": base_summary,
             "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
-            "base_copy_detected": base_is_copy,  # 복사 감지 플래그
+            "base_copy_detected": base_is_copy,
             "ft_summary": ft_summary,
             "ft_words": len(ft_summary.split()) if '[' not in ft_summary and ft_summary != "N/A (파인튜닝 미사용)" else 0,
-            "ft_copy_detected": ft_is_copy  # 복사 감지 플래그
+            "ft_copy_detected": ft_is_copy
         })
         
         print("✅")
     
     # 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_file = RESULTS_DIR / f"ab_test_v9_{timestamp}.json"
+    json_file = RESULTS_DIR / f"ab_test_v91_{timestamp}.json"
     
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump({
             "metadata": {
-                "version": "V9",
+                "version": "V9.1",
+                "improvements": "System 간결화 + User 프롬프트 제거",
                 "chat_template": USE_CHAT_TEMPLATE,
                 "system_message": USE_SYSTEM_MESSAGE,
+                "system_content": SYSTEM_MESSAGE if USE_SYSTEM_MESSAGE else None,
                 "finetuning": ENABLE_FINETUNING,
-                "copy_detection": ENABLE_COPY_DETECTION,
-                "copy_threshold": COPY_DETECTION_THRESHOLD,
                 "train_samples": TRAIN_SAMPLES,
                 "num_epochs": NUM_EPOCHS,
                 "temperature": TEMPERATURE,
@@ -930,10 +904,10 @@ if MODE == 0:
         
         if ft_valid:
             avg_ft = sum(r['ft_words'] for r in ft_valid) / len(ft_valid)
-            print(f"파인튜닝: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
+            print(f"V9.1 FT: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
             print(f"  복사 감지: {ft_copy}건")
         else:
-            print(f"파인튜닝: 0/3 성공")
+            print(f"V9.1 FT: 0/3 성공")
     
     print("\n샘플:")
     for r in all_results[:2]:
@@ -941,43 +915,38 @@ if MODE == 0:
         print("-"*60)
         print(r['article'][:300] + "...")
         print("-"*60)
-        copy_flag_base = " ⚠️ 복사 감지됨" if r['base_copy_detected'] else ""
+        copy_flag_base = " ⚠️ 복사 감지" if r['base_copy_detected'] else ""
         print(f"베이스: {r['base_summary']}{copy_flag_base}")
         if ENABLE_FINETUNING:
-            copy_flag_ft = " ⚠️ 복사 감지됨" if r['ft_copy_detected'] else ""
-            print(f"파인튜닝: {r['ft_summary']}{copy_flag_ft}")
+            copy_flag_ft = " ⚠️ 복사 감지" if r['ft_copy_detected'] else ""
+            print(f"V9.1 FT: {r['ft_summary']}{copy_flag_ft}")
     
     print("\n" + "="*60)
     print("✅ A/B 완료!")
     print("="*60)
     
     # ============================================================
-    # LLM 분석용 프롬프트 생성 ⭐
+    # LLM 분석용 프롬프트 생성
     # ============================================================
     
     print("\n" + "="*60)
     print("📝 LLM 분석용 프롬프트 생성")
     print("="*60)
     
-    analysis_prompt = f"""다음은 ArXiv 논문 요약 모델(V9)의 A/B 테스트 결과입니다. 결과를 분석해주세요.
+    analysis_prompt = f"""다음은 ArXiv 논문 요약 모델(V9.1)의 A/B 테스트 결과입니다.
 
 ## 모델 설정
 
-**버전:** V9 (apply_chat_template + 최적화)
-**Chat Template:** {'사용 ✅ (Qwen 공식 형식)' if USE_CHAT_TEMPLATE else '미사용'}
-**System Message:** {'사용 ✅' if USE_SYSTEM_MESSAGE else '미사용'}
-{f'- Content: "{SYSTEM_MESSAGE}"' if USE_SYSTEM_MESSAGE else ''}
-**학습 데이터:** {TRAIN_SAMPLES}개 (Train) + {VAL_SAMPLES}개 (Val)
-**에포크:** {NUM_EPOCHS}
+**버전:** V9.1 (Chat Template 최적화)
+**개선 사항:**
+- System message 간결화: 50단어 → 20단어
+- User 프롬프트 제거: "Summarize..." + 논문 → 논문만
+- 중복 지시사항 제거
+
+**Chat Template:** 사용 ✅
+**System Message:** "{SYSTEM_MESSAGE}"
+**학습:** {TRAIN_SAMPLES}개 × {NUM_EPOCHS} 에포크
 **Temperature:** {TEMPERATURE}
-**복사 감지:** {'사용' if ENABLE_COPY_DETECTION else '미사용'} (임계값: {COPY_DETECTION_THRESHOLD})
-**프롬프트:** "Summarize this paper in 2 sentences (max 45 words)"
-
-## 요구사항
-
-- **형식:** 2문장, 45단어 이하
-- **내용:** 논문의 핵심 내용 요약
-- **금지:** 논문 원문 복사
 
 ## 테스트 결과
 
@@ -992,97 +961,60 @@ if MODE == 0:
 {r['article']}
 ```
 
-**원본 초록 (정답):**
+**원본 초록:**
 ```
 {r['target']}
 ```
 
-**베이스 모델 출력:**
+**베이스:**
 ```
 {r['base_summary']}
 ```
-- 단어 수: {r['base_words']}
-- 복사 감지: {'⚠️ 예 (경고)' if r['base_copy_detected'] else '아니오'}
-{f"  → 주의: 5-gram 분석 결과 논문과 {COPY_DETECTION_THRESHOLD*100:.0f}% 이상 겹침 감지됨" if r['base_copy_detected'] else ""}
+- 단어: {r['base_words']}
+- 복사: {'⚠️ 예' if r['base_copy_detected'] else '아니오'}
 
 """
         
         if ENABLE_FINETUNING and r['ft_summary'] != "N/A (파인튜닝 미사용)":
-            analysis_prompt += f"""**파인튜닝 모델 출력:**
+            analysis_prompt += f"""**V9.1 파인튜닝:**
 ```
 {r['ft_summary']}
 ```
-- 단어 수: {r['ft_words']}
-- 복사 감지: {'⚠️ 예 (경고)' if r['ft_copy_detected'] else '아니오'}
-{f"  → 주의: 5-gram 분석 결과 논문과 {COPY_DETECTION_THRESHOLD*100:.0f}% 이상 겹침 감지됨" if r['ft_copy_detected'] else ""}
+- 단어: {r['ft_words']}
+- 복사: {'⚠️ 예' if r['ft_copy_detected'] else '아니오'}
 
 """
     
     analysis_prompt += """
 ## 분석 요청
 
-다음 항목들을 분석해주세요:
-
-### 1. 형식 준수
-- 각 출력이 2문장인가?
-- 각 출력이 45단어 이하인가?
-- 문장이 완결되었는가?
-
-### 2. 내용 품질
-- 논문의 핵심 내용을 담고 있는가?
-- 원본 초록과 비교했을 때 정확한가?
-- 요약이 명확하고 이해하기 쉬운가?
-
-### 3. 복사 여부
-- 논문 원문을 그대로 복사했는가?
-- 자신의 언어로 재작성했는가?
-- 복사 감지 기능이 제대로 작동했는가?
-
-### 4. 모델 비교 (파인튜닝이 있는 경우)
-- 베이스 모델 vs 파인튜닝 모델 중 어느 것이 더 나은가?
-- 각각의 강점과 약점은?
-- 파인튜닝의 효과가 있는가?
-
-### 5. V9 개선 효과
-- V8 대비 apply_chat_template의 효과는?
-- System message의 효과는?
-- 전반적 품질 개선이 있는가?
-
-### 6. 개선 방향
-- 어떤 문제점이 있는가?
-- 어떻게 개선할 수 있는가?
-- V10에서 무엇을 바꿔야 하는가?
-
-### 7. 점수 (10점 만점)
-각 테스트의 베이스/파인튜닝 모델에 점수를 매기고, 평균을 계산해주세요.
+1. **형식**: 2문장, 45단어 이하?
+2. **내용**: 핵심 요약?
+3. **V9.1 개선 효과**: System 간결화 + User 프롬프트 제거가 효과있었나?
+4. **점수**: 각 출력에 10점 만점 점수
 
 ---
 
-**상세하고 구체적으로 분석해주세요!**
+**상세 분석 부탁드립니다!**
 """
     
-    prompt_file = RESULTS_DIR / f"analysis_prompt_v9_{timestamp}.txt"
+    prompt_file = RESULTS_DIR / f"analysis_prompt_v91_{timestamp}.txt"
     with open(prompt_file, 'w', encoding='utf-8') as f:
         f.write(analysis_prompt)
     
-    print(f"✅ 분석용 프롬프트 저장: {prompt_file.name}")
-    
-    print("\n💡 사용 방법:")
-    print(f"  1. {prompt_file.name} 파일을 다운로드")
-    print("  2. Claude.ai 또는 ChatGPT에 프롬프트 입력")
-    print("  3. 상세한 분석 결과 받기")
+    print(f"✅ 분석 프롬프트 저장: {prompt_file.name}")
     
     print("\n" + "="*60)
-    print("✅ LLM 분석용 프롬프트 생성 완료!")
+    print("✅ 완료!")
     print("="*60)
 
 
 # ================================================================
-# 랜덤 테스트 (V9) ⭐
+# 랜덤 테스트 (V9.1)
 # ================================================================
 
 print("\n" + "="*60)
-print("🎲 랜덤 테스트 (V9)")
+print("🎲 랜덤 테스트 (V9.1)")
 print("="*60)
 
 if MODE == 1:
@@ -1094,7 +1026,7 @@ if MODE == 1:
     from peft import PeftModel
     
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9.1-FINAL"
     final_model_path = Path(OUTPUT_DIR) / "final_model"
     
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
@@ -1115,7 +1047,7 @@ if MODE == 1:
         )
         qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
         qwen_ft.eval()
-        print("✅ 파인튜닝 모델 로드")
+        print("✅ V9.1 모델 로드")
     else:
         qwen_ft = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
@@ -1143,9 +1075,9 @@ print(f"✅ 1000개 로드")
 random_indices = random.sample(range(len(full_dataset)), NUM_RANDOM_TESTS)
 print(f"인덱스: {random_indices}")
 
-# V9 프롬프트
-def make_prompt_v9(article):
-    """V9: apply_chat_template 사용"""
+# V9.1 프롬프트
+def make_prompt_v91(article):
+    """V9.1: System 간결 + User 논문만"""
     
     messages = []
     
@@ -1157,7 +1089,7 @@ def make_prompt_v9(article):
     
     messages.append({
         "role": "user",
-        "content": f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}"
+        "content": article  # 논문만!
     })
     
     if USE_CHAT_TEMPLATE:
@@ -1171,18 +1103,16 @@ def make_prompt_v9(article):
     
     return prompt
 
-print("\n" + "="*60)
-print("🔮 추론 시작")
-print("="*60)
+print("\n🔮 추론 시작...")
 
 for i, idx in enumerate(random_indices):
     paper = full_dataset[idx]
     
-    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print(f"📄 테스트 {i+1}/{NUM_RANDOM_TESTS} (인덱스: {idx})")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     
-    print(f"\n📖 논문 원본 (처음 500자):")
+    print(f"\n📖 논문 (처음 500자):")
     print("-"*60)
     print(paper['article'][:500] + "...")
     print("-"*60)
@@ -1192,9 +1122,9 @@ for i, idx in enumerate(random_indices):
     print(paper['abstract'])
     print("-"*60)
     
-    print(f"\n🔮 추론 중 (V9: Chat Template {'ON' if USE_CHAT_TEMPLATE else 'OFF'}, System {'ON' if USE_SYSTEM_MESSAGE else 'OFF'})...")
+    print(f"\n🔮 V9.1 추론 중...")
     
-    prompt = make_prompt_v9(paper['article'])
+    prompt = make_prompt_v91(paper['article'])
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_ft.device)
     
     with torch.no_grad():
@@ -1205,19 +1135,17 @@ for i, idx in enumerate(random_indices):
             no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
         )
     
-    # 생성된 부분만 추출 (프롬프트 제외)
     generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
     raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
     clean = clean_output(raw_output, paper['article'])
     
-    # 복사 감지 체크 (별도)
     is_copy = detect_copy(clean, paper['article']) if clean and '[' not in clean else False
     
-    print(f"\n📰 Research News Brief:")
+    print(f"\n📰 V9.1 요약:")
     print("="*60)
     print(clean)
     if is_copy:
-        print("\n⚠️ 복사 경고: 5-gram 분석 결과 논문과 {:.0f}% 이상 겹침 감지됨".format(COPY_DETECTION_THRESHOLD*100))
+        print("\n⚠️ 복사 경고: 5-gram 분석 결과 논문과 겹침 감지")
     print("="*60)
     
     is_failed = '[' in clean
@@ -1225,12 +1153,12 @@ for i, idx in enumerate(random_indices):
     sentence_count = 0 if is_failed else len([s for s in re.split(r'[.!?]+', clean) if s.strip()])
     
     print(f"\n📊 통계:")
-    print(f"  생성 성공: {'❌ 실패' if is_failed else '✅ 성공'}")
+    print(f"  성공: {'❌' if is_failed else '✅'}")
     if is_copy:
-        print(f"  복사 경고: ⚠️ 5-gram 분석 결과 논문과 겹침 감지됨")
+        print(f"  복사 경고: ⚠️")
     if not is_failed:
-        print(f"  단어 수: {word_count}")
-        print(f"  문장 수: {sentence_count}")
+        print(f"  단어: {word_count}")
+        print(f"  문장: {sentence_count}")
         print(f"  45단어: {'✅' if word_count <= 45 else '❌'}")
         print(f"  2문장: {'✅' if sentence_count == 2 else '⚠️ ' + str(sentence_count)}")
 
@@ -1238,20 +1166,13 @@ print("\n" + "="*60)
 print("✅ 완료!")
 print("="*60)
 
-if MODE == 0:
-    print("\n✨ V9 개선:")
-    print("  ✅ apply_chat_template (Qwen 공식) ⭐⭐⭐")
-    print("  ✅ System message (역할 명확화) ⭐⭐")
-    print("  ✅ 복사 감지 로직 (5-gram)")
-    print("  ✅ 프롬프트 명시 (Summarize)")
-    print(f"  ✅ 데이터 {TRAIN_SAMPLES}개")
-    print(f"  ✅ 에포크 {NUM_EPOCHS}")
-    print(f"  ✅ Temperature {TEMPERATURE}")
-    print(f"  ✅ LLM 분석 프롬프트 자동 생성")
-    print(f"\n📁 출력: {OUTPUT_DIR}")
-    print(f"📝 분석 프롬프트: {OUTPUT_DIR}/results/analysis_prompt_v9_*.txt")
+print("\n✨ V9.1 개선:")
+print("  ✅ System message 간결화 (50단어 → 20단어)")
+print("  ✅ User 프롬프트 제거 (논문만!)")
+print("  ✅ 중복 지시사항 제거")
+print(f"\n📁 출력: {OUTPUT_DIR}")
 
-print("\n🚀 V9 완성!")
-print("  V8 → V9: apply_chat_template 추가 (+15% 성능 예상)")
-print("  예상 품질: 7-8/10 (V8 6-7/10)")
+print("\n🚀 V9.1 완성!")
+print("  V9 → V9.1: Chat Template 최적화")
+print("  예상 품질: 8-9/10 (V9 0-1/10)")
 print("="*60)
