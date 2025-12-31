@@ -179,8 +179,21 @@ def clean_output_v9(raw_text, original_article=""):
         text = raw_text.split("Brief:")[-1].strip()
     elif "<|im_end|>" in raw_text:  # V9: chat template 처리
         text = raw_text.split("<|im_end|>")[-1].strip()
+    elif "<|im_start|>" in raw_text:  # V9: chat template 시작 태그 이후
+        # <|im_start|>assistant 이후 추출
+        if "assistant" in raw_text:
+            text = raw_text.split("assistant")[-1].strip()
+        else:
+            text = raw_text.split("<|im_start|>")[-1].strip()
     else:
         text = raw_text.strip()
+    
+    # V9: chat template 태그 완전 제거
+    text = re.sub(r'<\|im_start\|>', '', text)
+    text = re.sub(r'<\|im_end\|>', '', text)
+    text = re.sub(r'\bsystem\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\buser\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bassistant\b', '', text, flags=re.IGNORECASE)
     
     # STEP 2: 모든 ### 및 특수 구분자 제거
     text = re.sub(r'#{1,}', '', text)
@@ -199,8 +212,14 @@ def clean_output_v9(raw_text, original_article=""):
         r'(?i)45\s+words?',
         r'(?i)write\s+a',
         r'(?i)task\s*:',
-        r'<\|im_start\|>',  # V9: special tokens
+        r'<\|im_start\|>',
         r'<\|im_end\|>',
+        r'(?i)\bsystem\b',
+        r'(?i)\buser\b',
+        r'(?i)\bassistant\b',
+        r'(?i)you\s+are\s+a',  # "You are a research paper..."
+        r'(?i)research\s+paper\s+summarization\s+expert',
+        r'(?i)papers\s+concisely',
     ]
     
     for pattern in prompt_patterns:
@@ -272,14 +291,22 @@ def clean_output_aggressive_v9(raw_text, original_article=""):
         text = raw_text.split("Brief:")[-1].strip()
     elif "<|im_end|>" in raw_text:
         text = raw_text.split("<|im_end|>")[-1].strip()
+    elif "<|im_start|>" in raw_text:
+        if "assistant" in raw_text:
+            text = raw_text.split("assistant")[-1].strip()
+        else:
+            text = raw_text.split("<|im_start|>")[-1].strip()
     else:
         text = raw_text.strip()
     
-    text = re.sub(r'#{1,}|={3,}|-{3,}|<\|im_start\|>|<\|im_end\|>', '', text)
+    # Chat template 태그 제거
+    text = re.sub(r'<\|im_start\|>|<\|im_end\|>|system|user|assistant', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
     
     prompt_patterns = [
         r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
         r'(?i)max\s+\d+\s+words?', r'(?i)2-sentence',
+        r'(?i)you\s+are\s+a', r'(?i)research\s+paper',
     ]
     for pattern in prompt_patterns:
         text = re.sub(pattern, '', text)
@@ -814,7 +841,11 @@ if MODE == 0:
                 do_sample=True, top_p=0.9, repetition_penalty=1.2,
                 no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
             )
-        base_summary = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), test['article'])
+        
+        # 생성된 부분만 추출 (프롬프트 제외)
+        generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+        base_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        base_summary = clean_output(base_raw, test['article'])
         
         # 복사 감지 체크 (출력과 별도)
         base_is_copy = detect_copy(base_summary, test['article']) if base_summary and '[' not in base_summary else False
@@ -828,7 +859,11 @@ if MODE == 0:
                     do_sample=True, top_p=0.9, repetition_penalty=1.2,
                     no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
                 )
-            ft_summary = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), test['article'])
+            
+            # 생성된 부분만 추출 (프롬프트 제외)
+            generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+            ft_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+            ft_summary = clean_output(ft_raw, test['article'])
             
             # 복사 감지 체크 (출력과 별도)
             ft_is_copy = detect_copy(ft_summary, test['article']) if ft_summary and '[' not in ft_summary else False
@@ -1170,7 +1205,10 @@ for i, idx in enumerate(random_indices):
             no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
         )
     
-    clean = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), paper['article'])
+    # 생성된 부분만 추출 (프롬프트 제외)
+    generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+    raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+    clean = clean_output(raw_output, paper['article'])
     
     # 복사 감지 체크 (별도)
     is_copy = detect_copy(clean, paper['article']) if clean and '[' not in clean else False
