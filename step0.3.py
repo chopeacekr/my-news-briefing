@@ -44,12 +44,23 @@ ENABLE_FINETUNING = True
 DATA_DIR = "/content/drive/MyDrive/SummaryDataSet"
 DATA_FILE = "v10_training_data.csv"
 
-# 데이터 분할 비율 (자동 계산)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 데이터 사용량 설정 ⭐ 여기만 수정하세요!
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MAX_DATA_TO_USE = 100  # 사용할 최대 데이터 개수
+# 예시:
+#   100: 빠른 테스트 (90 train + 10 val)
+#   200: 빠른 검증 (180 train + 20 val)
+#   1000: 목표 품질 (900 train + 100 val)
+#   2000: 최고 품질 (1800 train + 200 val)
+#   0 또는 None: 전체 데이터 사용 (자동)
+
+# 데이터 분할 비율
 VAL_RATIO = 0.1  # 10%를 검증용으로
 
-# 또는 직접 지정 (0으로 설정 시 자동 계산)
-USE_TRAIN_SAMPLES = 0   # 0: 자동
-USE_VAL_SAMPLES = 0     # 0: 자동
+# 또는 직접 지정 (고급 설정, 보통은 0으로 두세요)
+USE_TRAIN_SAMPLES = 0   # 0: 자동 계산
+USE_VAL_SAMPLES = 0     # 0: 자동 계산
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 학습 설정
@@ -287,6 +298,7 @@ if MODE == 0:
     print(f"  모델: Qwen2.5-1.5B-Instruct")
     print(f"  버전: V10 (고품질 학습)")
     print(f"  데이터 소스: {DATA_DIR}")
+    print(f"  데이터 제한: {MAX_DATA_TO_USE if MAX_DATA_TO_USE and MAX_DATA_TO_USE > 0 else '없음 (전체 사용)'}")
     print(f"  출력: {OUTPUT_DIR}")
     
     # ============================================================
@@ -314,6 +326,22 @@ if MODE == 0:
     if len(df_success) == 0:
         raise ValueError(f"❌ 성공한 데이터 없음!\n"
                         f"→ Step 1을 다시 실행하세요!")
+    
+    # MAX_DATA_TO_USE 적용 ⭐ 핵심!
+    if MAX_DATA_TO_USE and MAX_DATA_TO_USE > 0:
+        if len(df_success) > MAX_DATA_TO_USE:
+            print(f"\n⚙️ 데이터 제한 적용:")
+            print(f"  사용 가능: {len(df_success)}개")
+            print(f"  설정 제한: {MAX_DATA_TO_USE}개")
+            print(f"  → {MAX_DATA_TO_USE}개만 사용합니다")
+            df_success = df_success.head(MAX_DATA_TO_USE)
+        else:
+            print(f"\n✅ 전체 데이터 사용:")
+            print(f"  사용 가능: {len(df_success)}개")
+            print(f"  설정 제한: {MAX_DATA_TO_USE}개")
+            print(f"  → 전체 {len(df_success)}개 사용")
+    else:
+        print(f"\n✅ 전체 데이터 사용: {len(df_success)}개")
     
     # 데이터량 자동 계산
     total_available = len(df_success)
@@ -351,9 +379,13 @@ if MODE == 0:
     train_df = df_success[:train_samples]
     val_df = df_success[train_samples:train_samples + val_samples]
     
-    # Dataset 변환
-    train_dataset = Dataset.from_pandas(train_df[['article', 'gpt4_summary']])
-    val_dataset = Dataset.from_pandas(val_df[['article', 'gpt4_summary']])
+    # Dataset 변환 ⭐ abstract, gpt4_summary만 사용
+    train_dataset = Dataset.from_pandas(train_df[['original_abstract', 'gpt4_summary']])
+    val_dataset = Dataset.from_pandas(val_df[['original_abstract', 'gpt4_summary']])
+    
+    # 컬럼명 변경 (original_abstract → abstract)
+    train_dataset = train_dataset.rename_column('original_abstract', 'abstract')
+    val_dataset = val_dataset.rename_column('original_abstract', 'abstract')
     
     # 통계
     print(f"\n📊 GPT-4 요약 통계:")
@@ -398,7 +430,7 @@ if MODE == 0:
         
         messages.append({
             "role": "user",
-            "content": example['article']
+            "content": example['abstract']  # ⭐ article → abstract
         })
         
         messages.append({
@@ -413,7 +445,7 @@ if MODE == 0:
                 add_generation_prompt=False
             )
         else:
-            text = f"Summarize this paper in 2 sentences (max 45 words):\n\n{example['article']}\n\nSummary: {example['gpt4_summary']}"
+            text = f"Summarize this abstract in 2 sentences (max 45 words):\n\n{example['abstract']}\n\nSummary: {example['gpt4_summary']}"
         
         return {"text": text}
     
@@ -434,7 +466,13 @@ if MODE == 0:
         print("="*60)
         
         def tokenize_function(example):
-            result = tokenizer(example['text'], truncation=True, max_length=512, padding=False)
+            # ⭐ truncation과 max_length 명시
+            result = tokenizer(
+                example['text'], 
+                truncation=True, 
+                max_length=512,  # 최대 길이
+                padding=False  # DataCollator가 처리
+            )
             result['labels'] = result['input_ids'].copy()
             return result
         
@@ -485,7 +523,9 @@ if MODE == 0:
             output_dir=OUTPUT_DIR,
             num_train_epochs=NUM_EPOCHS,
             per_device_train_batch_size=1,
+            per_device_eval_batch_size=1,  # ⭐ eval 배치 크기도 1로
             gradient_accumulation_steps=4,
+            eval_accumulation_steps=4,  # ⭐ eval도 누적
             learning_rate=2e-4,
             logging_steps=10,
             save_steps=50,
@@ -494,7 +534,8 @@ if MODE == 0:
             warmup_steps=10,
             fp16=True,
             report_to="none",
-            max_grad_norm=1.0
+            max_grad_norm=1.0,
+            dataloader_num_workers=0  # ⭐ 안정성 향상
         )
         
         trainer = Trainer(
@@ -502,7 +543,12 @@ if MODE == 0:
             args=training_args,
             train_dataset=train_dataset_tokenized,
             eval_dataset=val_dataset_tokenized,
-            data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+            data_collator=DataCollatorForLanguageModeling(
+                tokenizer=tokenizer, 
+                mlm=False,
+                pad_to_multiple_of=8,  # ⭐ 효율적인 padding
+                return_tensors="pt"  # ⭐ PyTorch 텐서 반환
+            )
         )
         
         print("\n🏋️ 학습 시작...")
@@ -559,8 +605,8 @@ if MODE == 0:
     print("🔬 A/B 테스트 (V10)")
     print("="*60)
     
-    def make_prompt_v10(article):
-        """V10 프롬프트 생성"""
+    def make_prompt_v10(abstract):
+        """V10 프롬프트 생성 - abstract 입력"""
         messages = []
         
         if USE_SYSTEM_MESSAGE:
@@ -571,7 +617,7 @@ if MODE == 0:
         
         messages.append({
             "role": "user",
-            "content": article
+            "content": abstract  # ⭐ abstract 사용
         })
         
         if USE_CHAT_TEMPLATE:
@@ -581,7 +627,7 @@ if MODE == 0:
                 add_generation_prompt=True
             )
         else:
-            prompt = f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
+            prompt = f"Summarize this abstract in 2 sentences (max 45 words):\n\n{abstract}\n\nSummary:"
         
         return prompt
     
@@ -623,8 +669,7 @@ if MODE == 0:
         paper = val_df.iloc[i]
         tests.append({
             "id": i + 1,
-            "article": paper['article'],
-            "original_abstract": paper['original_abstract'],
+            "abstract": paper['original_abstract'],  # ⭐ abstract 추가
             "gpt4_summary": paper['gpt4_summary']
         })
     
@@ -637,7 +682,7 @@ if MODE == 0:
     for i, test in enumerate(tests):
         print(f"  Test {i+1}/3...", end=" ")
         
-        prompt = make_prompt_v10(test['article'])
+        prompt = make_prompt_v10(test['abstract'])  # ⭐ abstract 전달
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_base.device)
         
         # 베이스
@@ -651,8 +696,8 @@ if MODE == 0:
         
         generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
         base_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        base_summary = clean_output(base_raw, test['article'])
-        base_is_copy = detect_copy(base_summary, test['article']) if base_summary and '[' not in base_summary else False
+        base_summary = clean_output(base_raw, test['abstract'])  # ⭐ abstract 전달
+        base_is_copy = detect_copy(base_summary, test['abstract']) if base_summary and '[' not in base_summary else False
         
         # 파인튜닝
         if ENABLE_FINETUNING and qwen_ft:
@@ -666,17 +711,16 @@ if MODE == 0:
             
             generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
             ft_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-            ft_summary = clean_output(ft_raw, test['article'])
-            ft_is_copy = detect_copy(ft_summary, test['article']) if ft_summary and '[' not in ft_summary else False
+            ft_summary = clean_output(ft_raw, test['abstract'])  # ⭐ abstract 전달
+            ft_is_copy = detect_copy(ft_summary, test['abstract']) if ft_summary and '[' not in ft_summary else False
         else:
             ft_summary = "N/A (파인튜닝 미사용)"
             ft_is_copy = False
         
         all_results.append({
             "test_id": test['id'],
-            "article": test['article'],
-            "article_length": len(test['article']),
-            "original_abstract": test['original_abstract'],
+            "abstract": test['abstract'],  # ⭐ abstract 저장
+            "abstract_length": len(test['abstract']),
             "gpt4_target": test['gpt4_summary'],
             "base_summary": base_summary,
             "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
@@ -739,9 +783,9 @@ if MODE == 0:
     
     print("\n샘플:")
     for r in all_results[:2]:
-        print(f"\n논문 (길이: {r['article_length']}자):")
+        print(f"\n초록 (길이: {r['abstract_length']}자):")
         print("-"*60)
-        print(r['article'][:200] + "...")
+        print(r['abstract'][:200] + "...")
         print("-"*60)
         print(f"GPT-4 타겟: {r['gpt4_target']}")
         print("-"*60)
@@ -779,9 +823,9 @@ if MODE == 0:
         analysis_prompt += f"""
 ### Test {i}
 
-**논문 원문 (전체):**
+**초록 (원문):**
 ```
-{r['article']}
+{r['abstract']}
 ```
 
 **GPT-4 타겟 요약:**
@@ -904,15 +948,15 @@ if MODE == 1:
     random_indices = random.sample(range(len(df_success)), min(NUM_RANDOM_TESTS, len(df_success)))
     print(f"인덱스: {random_indices}")
     
-    def make_prompt_v10(article):
+    def make_prompt_v10(abstract):
         messages = []
         if USE_SYSTEM_MESSAGE:
             messages.append({"role": "system", "content": SYSTEM_MESSAGE})
-        messages.append({"role": "user", "content": article})
+        messages.append({"role": "user", "content": abstract})
         if USE_CHAT_TEMPLATE:
             return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         else:
-            return f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
+            return f"Summarize this abstract in 2 sentences (max 45 words):\n\n{abstract}\n\nSummary:"
     
     print("\n🔮 추론 시작...")
     
@@ -923,9 +967,9 @@ if MODE == 1:
         print(f"📄 테스트 {i+1}/{len(random_indices)} (인덱스: {idx})")
         print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         
-        print(f"\n📖 논문 (처음 300자):")
+        print(f"\n📖 초록 (처음 300자):")
         print("-"*60)
-        print(paper['article'][:300] + "...")
+        print(paper['original_abstract'][:300] + "...")
         print("-"*60)
         
         print(f"\n📌 GPT-4 타겟 요약:")
@@ -936,7 +980,7 @@ if MODE == 1:
         
         print(f"\n🔮 V10 추론 중...")
         
-        prompt = make_prompt_v10(paper['article'])
+        prompt = make_prompt_v10(paper['original_abstract'])  # ⭐ abstract 사용
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_ft.device)
         
         with torch.no_grad():
@@ -949,9 +993,9 @@ if MODE == 1:
         
         generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
         raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        clean = clean_output(raw_output, paper['article'])
+        clean = clean_output(raw_output, paper['original_abstract'])  # ⭐ abstract 사용
         
-        is_copy = detect_copy(clean, paper['article']) if clean and '[' not in clean else False
+        is_copy = detect_copy(clean, paper['original_abstract']) if clean and '[' not in clean else False
         
         print(f"\n📰 V10 요약:")
         print("="*60)
