@@ -1,14 +1,14 @@
 """
 =================================================================
-📰 STEP 0.3: V6 최종 버전 (Few-shot + 초강화)
+📰 STEP 0.3: V7 최종 버전 (Few-shot 제거 + 초단순)
 =================================================================
 
-🆕 V6 개선 사항:
-✅ Few-shot 프롬프트 (예시 기반 학습)
-✅ 초강화 후처리 (패턴 3배 확장)
-✅ 논문 첫 부분 스킵
-✅ "Brief:" 기준 추출
-✅ 프롬프트 완전 차단
+🆕 V7 개선 사항:
+✅ Few-shot 완전 제거 (오버피팅 방지)
+✅ 초단순 프롬프트 (Paper: / Brief:)
+✅ V6 초강화 후처리 유지
+✅ 베이스 모델 중심 (FT는 선택)
+✅ 환각 방지
 
 🎯 MODE 설정
 
@@ -17,7 +17,14 @@ MODE = 0  ← 여기를 변경하세요!
 0: 전체 실행 (STEP 1-8 + A/B + 분석 + 랜덤)
 1: 랜덤 테스트만
 
-🎯 후처리 모드 설정
+🎯 학습 설정
+
+ENABLE_FINETUNING = True  ← 파인튜닝 여부
+
+True: 파인튜닝 실행
+False: 베이스 모델만 사용
+
+🎯 후처리 모드
 
 POST_PROCESS_MODE = "smart"  ← 여기를 변경하세요!
 
@@ -32,6 +39,7 @@ POST_PROCESS_MODE = "smart"  ← 여기를 변경하세요!
 # ================================================================
 
 MODE = 0  # 0: 전체, 1: 랜덤 테스트만
+ENABLE_FINETUNING = True  # True: FT, False: 베이스만
 POST_PROCESS_MODE = "smart"  # "smart" 또는 "aggressive"
 NUM_RANDOM_TESTS = 3  # 랜덤 테스트 개수 (1-10)
 
@@ -43,9 +51,10 @@ import os
 from pathlib import Path
 
 print("="*60)
-print("🚀 STEP 0.3 V6 - Few-shot + 초강화")
+print("🚀 STEP 0.3 V7 - Few-shot 제거 + 초단순")
 print("="*60)
 print(f"\nMODE: {MODE}")
+print(f"파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함 (베이스만)'}")
 print(f"후처리 모드: {POST_PROCESS_MODE}")
 
 if MODE == 0:
@@ -59,20 +68,16 @@ print("="*60)
 
 
 # ================================================================
-# 🔧 V6 후처리 함수 (초강화!) ⭐⭐⭐
+# 🔧 V7 후처리 함수 (V6 유지) ⭐⭐⭐
 # ================================================================
 
 import re
 
-def clean_output_v6(raw_text, original_article=""):
+def clean_output_v7(raw_text, original_article=""):
     """
-    V6 초강화 후처리
+    V7 초강화 후처리 (V6과 동일)
     
-    개선:
-    - Brief: 기준 추출
-    - 프롬프트 패턴 3배 확장
-    - 논문 첫 부분 스킵
-    - 더 공격적인 정제
+    Few-shot 제거로 프롬프트 패턴 단순화
     """
     
     # STEP 1: "Brief:" 이후만 추출
@@ -88,12 +93,12 @@ def clean_output_v6(raw_text, original_article=""):
     text = re.sub(r'={3,}', '', text)
     text = re.sub(r'-{3,}', '', text)
     
-    # STEP 3: 프롬프트 패턴 제거 (대폭 확장!)
+    # STEP 3: 프롬프트 패턴 제거 (V7 단순화)
     prompt_patterns = [
-        # Write 시리즈
-        r'(?i)write\s+a\s+.*?brief',
-        r'(?i)write\s+exactly',
-        r'(?i)write.*?sentence',
+        # Paper/Brief 관련
+        r'(?i)paper\s*:',
+        r'(?i)brief\s*:',
+        r'(?i)summary\s*:',
         
         # 숫자 관련
         r'(?i)max\s+\d+\s+words?',
@@ -101,28 +106,14 @@ def clean_output_v6(raw_text, original_article=""):
         r'(?i)2-sentence',
         r'(?i)45\s+words?',
         
-        # Brief/Summary 관련
+        # Write 시리즈
+        r'(?i)write\s+a\s+.*?brief',
+        r'(?i)write\s+exactly',
+        
+        # 기타
         r'(?i)research\s+news\s+brief',
-        r'(?i)news\s+brief',
-        r'(?i)brief\s*:',
-        r'(?i)summary\s*:',
-        
-        # For this 시리즈
         r'(?i)for\s+this\s+paper',
-        r'(?i)for\s+this\s+research',
-        
-        # Paper 관련
-        r'(?i)paper\s*:',
-        r'(?i)the\s+paper',
-        r'(?i)this\s+paper',
-        
-        # 기타 프롬프트
-        r'(?i)system\s*',
-        r'(?i)task\s*:',
-        r'(?i)requirements?\s*:',
         r'(?i)summarize',
-        r'(?i)scientific\s+editor',
-        r'(?i)academic\s+audience',
     ]
     
     for pattern in prompt_patterns:
@@ -136,7 +127,6 @@ def clean_output_v6(raw_text, original_article=""):
         r'(?i)^we\s+present\s+a\s+novel.*?\.',
         r'(?i)^this\s+paper\s+investigates.*?\.',
         r'(?i)^in\s+this\s+paper.*?\.',
-        r'(?i)^the\s+authors?\s+consider.*?\.',
     ]
     
     for pattern in paper_start_patterns:
@@ -147,9 +137,9 @@ def clean_output_v6(raw_text, original_article=""):
         article_start = original_article[:100].lower()
         text_start = text[:100].lower()
         
-        # 유사도 체크 (단순 버전)
+        # 유사도 체크
         common_words = set(article_start.split()) & set(text_start.split())
-        if len(common_words) > 10:  # 10개 이상 공통 단어
+        if len(common_words) > 10:
             # 첫 50단어 스킵
             words = text.split()
             if len(words) > 50:
@@ -160,7 +150,8 @@ def clean_output_v6(raw_text, original_article=""):
     for pattern in latex_patterns:
         text = re.sub(pattern, '', text)
     
-    # STEP 7: 정리
+    # STEP 7: 특수 문자 정리
+    text = re.sub(r'```', '', text)  # 코드 블록 제거
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\.\.+', '.', text)
     text = text.strip()
@@ -169,10 +160,10 @@ def clean_output_v6(raw_text, original_article=""):
     if not text or len(text) < 20:
         return "[요약 생성 실패 - 출력 없음]"
     
-    # STEP 9: 금지 키워드 체크
+    # STEP 9: 금지 키워드 체크 (간소화)
     forbidden_in_output = [
-        'write', 'brief', 'paper:', 'summary:', 'max', 'words',
-        '2-sentence', 'sentence', 'task', 'requirements'
+        'paper:', 'brief:', 'summary:', 'max', 'words',
+        '2-sentence', 'write'
     ]
     
     # 첫 20단어에 금지 키워드가 있으면 제거
@@ -229,8 +220,8 @@ def clean_output_v6(raw_text, original_article=""):
         return ' '.join(words[:45]) + '.'
 
 
-def clean_output_aggressive_v6(raw_text, original_article=""):
-    """V6 Aggressive: 2문장 강제"""
+def clean_output_aggressive_v7(raw_text, original_article=""):
+    """V7 Aggressive: 2문장 강제"""
     
     # STEP 1-9: Smart와 동일
     if "Brief:" in raw_text:
@@ -240,40 +231,20 @@ def clean_output_aggressive_v6(raw_text, original_article=""):
     else:
         text = raw_text.strip()
     
-    text = re.sub(r'#{1,}', '', text)
+    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
     
     prompt_patterns = [
-        r'(?i)write\s+a\s+.*?brief', r'(?i)max\s+\d+\s+words?',
-        r'(?i)2-sentence', r'(?i)for\s+this\s+paper',
-        r'(?i)brief\s*:', r'(?i)paper\s*:',
+        r'(?i)paper\s*:', r'(?i)brief\s*:', r'(?i)max\s+\d+\s+words?',
+        r'(?i)2-sentence', r'(?i)write\s+a',
     ]
     for pattern in prompt_patterns:
         text = re.sub(pattern, '', text)
     
-    paper_patterns = [
-        r'(?i)^information-theoretic\s+research.*?\.',
-        r'(?i)^it\s+is\s+believed.*?\.',
-    ]
-    for pattern in paper_patterns:
-        text = re.sub(pattern, '', text, count=1)
-    
+    text = re.sub(r'```', '', text)
     text = re.sub(r'\s+', ' ', text).strip()
     
     if not text or len(text) < 20:
         return "[요약 생성 실패]"
-    
-    # 금지 키워드 체크
-    forbidden = ['write', 'brief', 'max', 'words', 'sentence']
-    first_words = ' '.join(text.split()[:20]).lower()
-    if any(kw in first_words for kw in forbidden):
-        sentences = re.split(r'[.!?]+', text)
-        clean_sentences = [s.strip() for s in sentences 
-                          if not any(kw in s.lower() for kw in forbidden) 
-                          and len(s.split()) >= 5]
-        if clean_sentences:
-            text = '. '.join(clean_sentences)
-        else:
-            return "[요약 생성 실패]"
     
     # 문장 분리
     sentences = re.split(r'(?<=[.!?])\s+', text)
@@ -324,12 +295,12 @@ def clean_output_aggressive_v6(raw_text, original_article=""):
 def clean_output(raw_text, original_article=""):
     """선택된 POST_PROCESS_MODE로 후처리"""
     if POST_PROCESS_MODE == "aggressive":
-        return clean_output_aggressive_v6(raw_text, original_article)
+        return clean_output_aggressive_v7(raw_text, original_article)
     else:
-        return clean_output_v6(raw_text, original_article)
+        return clean_output_v7(raw_text, original_article)
 
 
-print(f"\n✅ 후처리 함수 V6 로드 완료 ({POST_PROCESS_MODE} 모드)")
+print(f"\n✅ 후처리 함수 V7 로드 완료 ({POST_PROCESS_MODE} 모드)")
 
 
 # ================================================================
@@ -409,7 +380,7 @@ if MODE == 0:
     
     # 설정
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V6-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V7-FINAL"
     RESULTS_DIR = Path(OUTPUT_DIR) / "results"
     
     TRAIN_SAMPLES = 40
@@ -421,8 +392,9 @@ if MODE == 0:
     
     print(f"\n⚙️ 설정:")
     print(f"  모델: Qwen2.5-1.5B-Instruct")
-    print(f"  프롬프트: V6 (Few-shot)")
-    print(f"  후처리: {POST_PROCESS_MODE} V6 (초강화)")
+    print(f"  프롬프트: V7 (초단순, Few-shot 제거)")
+    print(f"  파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함'}")
+    print(f"  후처리: {POST_PROCESS_MODE} V7")
     print(f"  샘플: Train {TRAIN_SAMPLES}, Val {VAL_SAMPLES}")
     print(f"  출력: {OUTPUT_DIR}")
     
@@ -465,184 +437,188 @@ if MODE == 0:
     print(f"✅ Train: {len(train_dataset)}, Val: {len(val_dataset)}")
     
     # ============================================================
-    # STEP 4: 프롬프트 적용 (V6 - Few-shot!) ⭐⭐⭐
+    # STEP 4: 프롬프트 적용 (V7 - 초단순!) ⭐⭐⭐
     # ============================================================
     
     print("\n" + "="*60)
-    print("📝 STEP 4: V6 Few-shot 프롬프트 적용")
+    print("📝 STEP 4: V7 초단순 프롬프트 적용")
     print("="*60)
     
-    # ⭐ V6 프롬프트: Few-shot 예시 기반!
-    FEW_SHOT_EXAMPLES = """Paper: We developed a novel deep learning architecture combining transformers and convolutional networks for image classification.
-Brief: Novel hybrid architecture combining transformers and CNNs achieves superior image classification performance.
-
-Paper: This study examines the effects of climate change on coral reef ecosystems through five-year monitoring across Pacific regions.
-Brief: Five-year study reveals significant climate change impacts on Pacific coral reef ecosystems.
-
-"""
-    
+    # ⭐ V7 프롬프트: Few-shot 완전 제거!
     def formatting_prompts_func(example):
-        # Few-shot 예시 + 실제 데이터
-        text = f"{FEW_SHOT_EXAMPLES}Paper: {example['article']}\nBrief: {example['abstract']}"
+        # 초단순: Paper: / Brief:
+        text = f"Paper: {example['article']}\nBrief: {example['abstract']}"
         return {"text": text}
     
-    print("🔄 V6 Few-shot 프롬프트 적용 중...")
+    print("🔄 V7 초단순 프롬프트 적용 중...")
+    print("  형식: Paper: {article}\\nBrief: {abstract}")
+    print("  Few-shot: 제거됨 ✅")
     train_dataset = train_dataset.map(formatting_prompts_func)
     val_dataset = val_dataset.map(formatting_prompts_func)
     print("✅ 프롬프트 적용 완료")
     
     # ============================================================
-    # STEP 5: 토크나이즈
+    # STEP 5-8: 학습 (ENABLE_FINETUNING=True일 때만)
+    # ============================================================
+    
+    if ENABLE_FINETUNING:
+        print("\n" + "="*60)
+        print("🔤 STEP 5: 토크나이즈")
+        print("="*60)
+        
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "right"
+        
+        print("✅ 토크나이저 로드")
+        
+        def tokenize_function(example):
+            result = tokenizer(example['text'], truncation=True, max_length=512, padding=False)
+            result['labels'] = result['input_ids'].copy()
+            return result
+        
+        print("🔄 토크나이즈 중...")
+        train_dataset_tokenized = train_dataset.map(tokenize_function, remove_columns=train_dataset.column_names)
+        val_dataset_tokenized = val_dataset.map(tokenize_function, remove_columns=val_dataset.column_names)
+        print("✅ 토크나이즈 완료")
+        
+        # ========================================================
+        # STEP 6: 모델 로딩
+        # ========================================================
+        
+        print("\n" + "="*60)
+        print("🚀 STEP 6: 모델 로딩 (4-bit)")
+        print("="*60)
+        
+        print("📥 Qwen2.5-1.5B-Instruct 로딩 중...")
+        model = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16,
+                bnb_4bit_use_double_quant=True
+            ),
+            device_map="auto",
+            trust_remote_code=True
+        )
+        print("✅ 모델 로드 완료")
+        
+        print("\n🔧 LoRA 준비 중...")
+        model = prepare_model_for_kbit_training(model)
+        
+        lora_config = LoraConfig(
+            r=16,
+            lora_alpha=32,
+            target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+            lora_dropout=0.1,
+            bias="none",
+            task_type="CAUSAL_LM"
+        )
+        model = get_peft_model(model, lora_config)
+        
+        print("\n📊 학습 가능한 파라미터:")
+        model.print_trainable_parameters()
+        
+        # ========================================================
+        # STEP 7: 학습
+        # ========================================================
+        
+        print("\n" + "="*60)
+        print("🎯 STEP 7: 모델 학습")
+        print("="*60)
+        
+        training_args = TrainingArguments(
+            output_dir=OUTPUT_DIR,
+            num_train_epochs=1,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=4,
+            learning_rate=2e-4,
+            logging_steps=10,
+            save_steps=20,
+            eval_strategy="steps",
+            eval_steps=20,
+            warmup_steps=2,
+            fp16=True,
+            report_to="none",
+            max_grad_norm=1.0
+        )
+        
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset_tokenized,
+            eval_dataset=val_dataset_tokenized,
+            data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
+        )
+        
+        print("\n🏋️ 학습 시작...")
+        print(f"  Epochs: 1")
+        print(f"  Batch size: 1 × 4")
+        print(f"  Learning rate: 2e-4")
+        print()
+        
+        trainer.train()
+        
+        print("\n✅ 학습 완료!")
+        
+        # ========================================================
+        # STEP 8: 저장
+        # ========================================================
+        
+        print("\n" + "="*60)
+        print("💾 STEP 8: 모델 저장")
+        print("="*60)
+        
+        final_model_path = Path(OUTPUT_DIR) / "final_model"
+        trainer.model.save_pretrained(final_model_path)
+        tokenizer.save_pretrained(final_model_path)
+        
+        print(f"✅ 저장 완료: {final_model_path}")
+        
+        # 메타데이터
+        metadata = {
+            "model": BASE_MODEL,
+            "prompt": "V7 초단순 (Few-shot 제거)",
+            "post_process": f"{POST_PROCESS_MODE} V7",
+            "train_samples": TRAIN_SAMPLES,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        with open(final_model_path / "metadata.json", 'w') as f:
+            json.dump(metadata, f, indent=2)
+        
+        # 정리
+        del model, trainer
+        gc.collect()
+        torch.cuda.empty_cache()
+        
+        print("\n" + "="*60)
+        print("✅ STEP 1-8 완료!")
+        print("="*60)
+    
+    else:
+        print("\n" + "="*60)
+        print("⏭️  파인튜닝 건너뛰기 (베이스 모델만 사용)")
+        print("="*60)
+        
+        # 토크나이저만 로드
+        tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+    
+    # ============================================================
+    # A/B 테스트 (V7) ⭐
     # ============================================================
     
     print("\n" + "="*60)
-    print("🔤 STEP 5: 토크나이즈")
+    print("🔬 A/B 테스트 (V7)")
     print("="*60)
     
-    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token
-    tokenizer.padding_side = "right"
-    
-    print("✅ 토크나이저 로드")
-    
-    def tokenize_function(example):
-        result = tokenizer(example['text'], truncation=True, max_length=512, padding=False)
-        result['labels'] = result['input_ids'].copy()
-        return result
-    
-    print("🔄 토크나이즈 중...")
-    train_dataset_tokenized = train_dataset.map(tokenize_function, remove_columns=train_dataset.column_names)
-    val_dataset_tokenized = val_dataset.map(tokenize_function, remove_columns=val_dataset.column_names)
-    print("✅ 토크나이즈 완료")
-    
-    # ============================================================
-    # STEP 6: 모델 로딩
-    # ============================================================
-    
-    print("\n" + "="*60)
-    print("🚀 STEP 6: 모델 로딩 (4-bit)")
-    print("="*60)
-    
-    print("📥 Qwen2.5-1.5B-Instruct 로딩 중...")
-    model = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True
-        ),
-        device_map="auto",
-        trust_remote_code=True
-    )
-    print("✅ 모델 로드 완료")
-    
-    print("\n🔧 LoRA 준비 중...")
-    model = prepare_model_for_kbit_training(model)
-    
-    lora_config = LoraConfig(
-        r=16,
-        lora_alpha=32,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
-        lora_dropout=0.1,
-        bias="none",
-        task_type="CAUSAL_LM"
-    )
-    model = get_peft_model(model, lora_config)
-    
-    print("\n📊 학습 가능한 파라미터:")
-    model.print_trainable_parameters()
-    
-    # ============================================================
-    # STEP 7: 학습
-    # ============================================================
-    
-    print("\n" + "="*60)
-    print("🎯 STEP 7: 모델 학습")
-    print("="*60)
-    
-    training_args = TrainingArguments(
-        output_dir=OUTPUT_DIR,
-        num_train_epochs=1,
-        per_device_train_batch_size=1,
-        gradient_accumulation_steps=4,
-        learning_rate=2e-4,
-        logging_steps=10,
-        save_steps=20,
-        eval_strategy="steps",
-        eval_steps=20,
-        warmup_steps=2,
-        fp16=True,
-        report_to="none",
-        max_grad_norm=1.0
-    )
-    
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=train_dataset_tokenized,
-        eval_dataset=val_dataset_tokenized,
-        data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
-    )
-    
-    print("\n🏋️ 학습 시작...")
-    print(f"  Epochs: 1")
-    print(f"  Batch size: 1 × 4")
-    print(f"  Learning rate: 2e-4")
-    print()
-    
-    trainer.train()
-    
-    print("\n✅ 학습 완료!")
-    
-    # ============================================================
-    # STEP 8: 저장
-    # ============================================================
-    
-    print("\n" + "="*60)
-    print("💾 STEP 8: 모델 저장")
-    print("="*60)
-    
-    final_model_path = Path(OUTPUT_DIR) / "final_model"
-    trainer.model.save_pretrained(final_model_path)
-    tokenizer.save_pretrained(final_model_path)
-    
-    print(f"✅ 저장 완료: {final_model_path}")
-    
-    # 메타데이터
-    metadata = {
-        "model": BASE_MODEL,
-        "prompt": "V6 Few-shot",
-        "post_process": f"{POST_PROCESS_MODE} V6 초강화",
-        "train_samples": TRAIN_SAMPLES,
-        "timestamp": datetime.now().isoformat()
-    }
-    
-    with open(final_model_path / "metadata.json", 'w') as f:
-        json.dump(metadata, f, indent=2)
-    
-    # 정리
-    del model, trainer
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    print("\n" + "="*60)
-    print("✅ STEP 1-8 완료!")
-    print("="*60)
-    
-    # ============================================================
-    # A/B 테스트 (V6) ⭐
-    # ============================================================
-    
-    print("\n" + "="*60)
-    print("🔬 A/B 테스트 (V6)")
-    print("="*60)
-    
-    # V6 Few-shot 프롬프트
-    def make_prompt_v6(article):
-        return f"""{FEW_SHOT_EXAMPLES}Paper: {article}
-Brief:"""
+    # V7 초단순 프롬프트
+    def make_prompt_v7(article):
+        return f"Paper: {article}\nBrief:"
     
     # 모델 로딩
     print("\n🤖 모델 로딩...")
@@ -656,19 +632,23 @@ Brief:"""
         device_map="auto", trust_remote_code=True
     )
     qwen_base.eval()
+    print("  ✅ 베이스 모델")
     
-    qwen_ft = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16
-        ),
-        device_map="auto", trust_remote_code=True
-    )
-    qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
-    qwen_ft.eval()
-    
-    print("✅ 모델 로드 완료")
+    if ENABLE_FINETUNING:
+        qwen_ft = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            ),
+            device_map="auto", trust_remote_code=True
+        )
+        qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
+        qwen_ft.eval()
+        print("  ✅ 파인튜닝 모델")
+    else:
+        qwen_ft = None
+        print("  ⏭️  파인튜닝 모델 없음")
     
     # 테스트
     tests = [
@@ -684,7 +664,7 @@ Brief:"""
     for i, test in enumerate(tests):
         print(f"  Test {i+1}/3...", end=" ")
         
-        prompt = make_prompt_v6(test['article'])
+        prompt = make_prompt_v7(test['article'])
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_base.device)
         
         # 베이스
@@ -697,13 +677,16 @@ Brief:"""
         base_summary = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), test['article'])
         
         # 파인튜닝
-        with torch.no_grad():
-            outputs = qwen_ft.generate(
-                **inputs, max_new_tokens=80, min_length=30, temperature=0.5,
-                do_sample=True, top_p=0.9, repetition_penalty=1.2,
-                no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
-            )
-        ft_summary = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), test['article'])
+        if ENABLE_FINETUNING and qwen_ft:
+            with torch.no_grad():
+                outputs = qwen_ft.generate(
+                    **inputs, max_new_tokens=80, min_length=30, temperature=0.5,
+                    do_sample=True, top_p=0.9, repetition_penalty=1.2,
+                    no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
+                )
+            ft_summary = clean_output(tokenizer.decode(outputs[0], skip_special_tokens=True), test['article'])
+        else:
+            ft_summary = "N/A (파인튜닝 미사용)"
         
         all_results.append({
             "test_id": test['id'],
@@ -712,17 +695,17 @@ Brief:"""
             "base_summary": base_summary,
             "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
             "ft_summary": ft_summary,
-            "ft_words": len(ft_summary.split()) if '[' not in ft_summary else 0
+            "ft_words": len(ft_summary.split()) if '[' not in ft_summary and ft_summary != "N/A (파인튜닝 미사용)" else 0
         })
         
         print("✅")
     
     # 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_file = RESULTS_DIR / f"ab_test_v6_{timestamp}.json"
+    json_file = RESULTS_DIR / f"ab_test_v7_{timestamp}.json"
     
     with open(json_file, 'w', encoding='utf-8') as f:
-        json.dump({"metadata": {"version": "V6", "timestamp": datetime.now().isoformat()}, "results": all_results}, f, indent=2, ensure_ascii=False)
+        json.dump({"metadata": {"version": "V7", "finetuning": ENABLE_FINETUNING, "timestamp": datetime.now().isoformat()}, "results": all_results}, f, indent=2, ensure_ascii=False)
     
     print(f"✅ 저장: {json_file.name}")
     
@@ -732,7 +715,6 @@ Brief:"""
     print("="*60)
     
     base_valid = [r for r in all_results if '[' not in r['base_summary']]
-    ft_valid = [r for r in all_results if '[' not in r['ft_summary']]
     
     if base_valid:
         avg_base = sum(r['base_words'] for r in base_valid) / len(base_valid)
@@ -740,17 +722,21 @@ Brief:"""
     else:
         print(f"\n베이스: 0/3 성공")
     
-    if ft_valid:
-        avg_ft = sum(r['ft_words'] for r in ft_valid) / len(ft_valid)
-        print(f"파인튜닝: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
-    else:
-        print(f"파인튜닝: 0/3 성공")
+    if ENABLE_FINETUNING:
+        ft_valid = [r for r in all_results if '[' not in r['ft_summary'] and r['ft_summary'] != "N/A (파인튜닝 미사용)"]
+        
+        if ft_valid:
+            avg_ft = sum(r['ft_words'] for r in ft_valid) / len(ft_valid)
+            print(f"파인튜닝: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
+        else:
+            print(f"파인튜닝: 0/3 성공")
     
     print("\n샘플:")
     for r in all_results[:2]:
         print(f"\n논문: {r['article'][:60]}...")
         print(f"베이스: {r['base_summary']}")
-        print(f"파인튜닝: {r['ft_summary']}")
+        if ENABLE_FINETUNING:
+            print(f"파인튜닝: {r['ft_summary']}")
     
     print("\n" + "="*60)
     print("✅ A/B 완료!")
@@ -758,11 +744,11 @@ Brief:"""
 
 
 # ================================================================
-# 랜덤 테스트 (V6) ⭐
+# 랜덤 테스트 (V7) ⭐
 # ================================================================
 
 print("\n" + "="*60)
-print("🎲 랜덤 테스트 (V6)")
+print("🎲 랜덤 테스트 (V7)")
 print("="*60)
 
 if MODE == 1:
@@ -774,35 +760,39 @@ if MODE == 1:
     from peft import PeftModel
     
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V6-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V7-FINAL"
     final_model_path = Path(OUTPUT_DIR) / "final_model"
-    
-    if not final_model_path.exists():
-        raise FileNotFoundError(f"모델 없음: {final_model_path}")
     
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
-    qwen_ft = AutoModelForCausalLM.from_pretrained(
-        BASE_MODEL,
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=True, bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16
-        ),
-        device_map="auto", trust_remote_code=True
-    )
-    qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
-    qwen_ft.eval()
-    
-    # Few-shot 예시
-    FEW_SHOT_EXAMPLES = """Paper: We developed a novel deep learning architecture combining transformers and convolutional networks for image classification.
-Brief: Novel hybrid architecture combining transformers and CNNs achieves superior image classification performance.
-
-Paper: This study examines the effects of climate change on coral reef ecosystems through five-year monitoring across Pacific regions.
-Brief: Five-year study reveals significant climate change impacts on Pacific coral reef ecosystems.
-
-"""
+    if ENABLE_FINETUNING:
+        if not final_model_path.exists():
+            raise FileNotFoundError(f"모델 없음: {final_model_path}")
+        
+        qwen_ft = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            ),
+            device_map="auto", trust_remote_code=True
+        )
+        qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
+        qwen_ft.eval()
+        print("✅ 파인튜닝 모델 로드")
+    else:
+        qwen_ft = AutoModelForCausalLM.from_pretrained(
+            BASE_MODEL,
+            quantization_config=BitsAndBytesConfig(
+                load_in_4bit=True, bnb_4bit_quant_type="nf4",
+                bnb_4bit_compute_dtype=torch.float16
+            ),
+            device_map="auto", trust_remote_code=True
+        )
+        qwen_ft.eval()
+        print("✅ 베이스 모델 로드")
 
 # 데이터
 def clean_arxiv_text(text):
@@ -819,10 +809,9 @@ print(f"✅ 1000개 로드")
 random_indices = random.sample(range(len(full_dataset)), NUM_RANDOM_TESTS)
 print(f"인덱스: {random_indices}")
 
-# V6 Few-shot 프롬프트
-def make_prompt_v6(article):
-    return f"""{FEW_SHOT_EXAMPLES}Paper: {article}
-Brief:"""
+# V7 초단순 프롬프트
+def make_prompt_v7(article):
+    return f"Paper: {article}\nBrief:"
 
 print("\n" + "="*60)
 print("🔮 추론 시작")
@@ -845,9 +834,9 @@ for i, idx in enumerate(random_indices):
     print(paper['abstract'])
     print("-"*60)
     
-    print(f"\n🔮 추론 중 (V6: {POST_PROCESS_MODE})...")
+    print(f"\n🔮 추론 중 (V7: {POST_PROCESS_MODE})...")
     
-    prompt = make_prompt_v6(paper['article'])
+    prompt = make_prompt_v7(paper['article'])
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_ft.device)
     
     with torch.no_grad():
@@ -881,12 +870,12 @@ print("✅ 완료!")
 print("="*60)
 
 if MODE == 0:
-    print("\n✨ V6 개선:")
-    print("  ✅ Few-shot 프롬프트 (예시 기반)")
-    print("  ✅ 초강화 후처리 (패턴 3배)")
-    print("  ✅ Brief: 기준 추출")
-    print("  ✅ 논문 첫 부분 스킵")
+    print("\n✨ V7 개선:")
+    print("  ✅ Few-shot 완전 제거")
+    print("  ✅ 초단순 프롬프트 (Paper:/Brief:)")
+    print("  ✅ V6 초강화 후처리 유지")
+    print(f"  ✅ 파인튜닝: {'사용' if ENABLE_FINETUNING else '미사용'}")
     print(f"\n📁 출력: {OUTPUT_DIR}")
 
-print("\n🚀 V6 완성!")
+print("\n🚀 V7 완성!")
 print("="*60)
