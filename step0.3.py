@@ -650,12 +650,53 @@ if MODE == 0:
         qwen_ft = None
         print("  ⏭️  파인튜닝 모델 없음")
     
-    # 테스트
-    tests = [
-        {"id": 1, "article": "We present a novel deep learning approach for natural language processing tasks. Our method combines recurrent and convolutional neural networks to achieve state-of-the-art results on multiple benchmarks including GLUE and SuperGLUE.", "abstract": "Novel hybrid neural architecture achieves state-of-the-art NLP results."},
-        {"id": 2, "article": "This paper investigates the impact of climate change on Arctic ecosystems through extensive five-year field studies. Our observations reveal significant habitat shifts and species migration patterns across monitored regions.", "abstract": "Five-year field study reveals climate change impacts on Arctic ecosystems."},
-        {"id": 3, "article": "We introduce a new quantum computing algorithm that achieves 100x speedup for optimization problems. The proposed method leverages quantum entanglement to explore solution spaces more efficiently than classical approaches.", "abstract": "New quantum algorithm achieves 100x speedup for optimization tasks."}
-    ]
+    # 테스트: 실제 ArXiv 논문 전체 사용
+    # val_dataset에서 3개 샘플 가져오기 (전체 논문 포함)
+    print("\n📥 테스트용 논문 로딩...")
+    
+    # val_dataset이 없으면 다시 로드
+    if 'val_dataset' not in locals():
+        print("  Val 데이터셋 다시 로딩...")
+        from datasets import load_dataset
+        
+        def clean_arxiv_text(text):
+            if not isinstance(text, str):
+                return ""
+            text = re.sub(r'@xmath\d+', '', text)
+            text = re.sub(r'@xcite', '', text)
+            text = re.sub(r'@xref', '', text)
+            text = re.sub(r'\$.*?\$', '', text)
+            text = re.sub(r'\\[a-zA-Z]+\{.*?\}', '', text)
+            text = re.sub(r'\s+', ' ', text)
+            text = re.sub(r'\.\.+', '.', text)
+            text = re.sub(r'--+', '-', text)
+            return text.strip()
+        
+        dataset_temp = load_dataset("ccdv/arxiv-summarization", split=f"train[:{NUM_SAMPLES}]")
+        dataset_temp = dataset_temp.map(lambda x: {
+            'article': clean_arxiv_text(x['article']),
+            'abstract': clean_arxiv_text(x['abstract'])
+        })
+        dataset_temp = dataset_temp.train_test_split(test_size=VAL_SAMPLES, seed=42)
+        val_dataset_raw = dataset_temp['test']
+    else:
+        # 이미 있으면 원본 데이터에서 추출 (formatting 전)
+        val_dataset_raw = val_dataset
+    
+    # 처음 3개 논문 전체 사용
+    tests = []
+    for i in range(min(3, len(val_dataset_raw))):
+        paper = val_dataset_raw[i]
+        tests.append({
+            "id": i + 1,
+            "article": paper['article'],  # 전체 논문!
+            "abstract": paper['abstract']
+        })
+    
+    print(f"  ✅ {len(tests)}개 논문 로드 완료")
+    print(f"  논문 1 길이: {len(tests[0]['article'])} 문자")
+    print(f"  논문 2 길이: {len(tests[1]['article'])} 문자")
+    print(f"  논문 3 길이: {len(tests[2]['article'])} 문자")
     
     all_results = []
     
@@ -690,7 +731,8 @@ if MODE == 0:
         
         all_results.append({
             "test_id": test['id'],
-            "article": test['article'],
+            "article_preview": test['article'][:500] + "...",  # 처음 500자만 미리보기
+            "article_full_length": len(test['article']),  # 전체 길이 기록
             "target": test['abstract'],
             "base_summary": base_summary,
             "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
@@ -733,7 +775,7 @@ if MODE == 0:
     
     print("\n샘플:")
     for r in all_results[:2]:
-        print(f"\n논문: {r['article'][:60]}...")
+        print(f"\n논문 (길이: {r['article_full_length']}자): {r['article_preview']}")
         print(f"베이스: {r['base_summary']}")
         if ENABLE_FINETUNING:
             print(f"파인튜닝: {r['ft_summary']}")
