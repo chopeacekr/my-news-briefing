@@ -1,38 +1,32 @@
 """
 =================================================================
-📰 STEP 0.3: V9.1 수정 버전 (Chat Template 최적화)
+📰 STEP 0.3: V10 Step 2 - 고품질 데이터로 모델 학습 (개선 버전)
 =================================================================
 
-🆕 V9.1 개선 사항:
-✅ System message 간결화 ⭐⭐⭐ NEW!
-✅ User 프롬프트 제거 (논문만!) ⭐⭐⭐ NEW!
-✅ 중복 지시사항 제거 ⭐⭐⭐ NEW!
-✅ apply_chat_template 사용 (Qwen 공식)
-✅ 생성 부분만 추출 (프롬프트 제외)
-✅ 복사 감지 로직 (경고만)
-✅ 학습 데이터 200개 × 3 에포크
+🎯 V10 핵심 개선:
+✅ 데이터 읽기: /SummaryDataSet/ 폴더에서 자동 로드
+✅ 유연한 데이터량: 사용 가능한 데이터 자동 감지
+✅ 학습 데이터: GPT-4 2문장 45단어 고품질 요약
 
-🔧 V9 → V9.1 핵심 변경:
-✅ System: "2문장 45단어" → 간결한 역할 정의
-✅ User: "Summarize... + 논문" → 논문만!
-✅ 중복 제거 → 명확한 역할 분리
+📊 데이터 소스:
+/content/drive/MyDrive/SummaryDataSet/v10_training_data.csv
 
-=================================================================
-📊 현재 설정 (V9.1 권장값)
-=================================================================
-
-학습 데이터: Train 200개 + Val 10개 = 총 210개
-학습 에포크: 3 에포크
-Temperature: 0.7
-Chat Template: ✅ 사용 (Qwen 공식)
-System Message: ✅ 간결화 (20단어)
-
-예상 시간: ~60분
-예상 품질: 8-9/10 (V9 0-1/10에서 대폭 개선!)
-예상 성능: 90%
+📈 사용 시나리오:
+- 200개 데이터: 180 train + 20 val
+- 1000개 데이터: 900 train + 100 val
+- 2000개 데이터: 1800 train + 200 val
 
 =================================================================
 """
+
+import subprocess
+import sys
+import os
+from pathlib import Path
+
+print("\n" + "="*60)
+print("🚀 STEP 0.3 V10 - 고품질 학습 (개선)")
+print("="*60)
 
 # ================================================================
 # ⚙️ 설정 - 여기만 수정하세요!
@@ -42,24 +36,32 @@ System Message: ✅ 간결화 (20단어)
 # 실행 모드
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MODE = 0  # 0: 전체 실행 (학습+테스트), 1: 랜덤 테스트만
-ENABLE_FINETUNING = True  # True: 파인튜닝 실행, False: 베이스 모델만
+ENABLE_FINETUNING = True
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 학습 데이터 설정
+# 데이터 설정 ⭐ V10 핵심!
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TRAIN_SAMPLES = 200  # 학습 샘플 수
-VAL_SAMPLES = 10     # 검증 샘플 수
-NUM_EPOCHS = 3       # 학습 에포크 수
+DATA_DIR = "/content/drive/MyDrive/SummaryDataSet"
+DATA_FILE = "v10_training_data.csv"
+
+# 데이터 분할 비율 (자동 계산)
+VAL_RATIO = 0.1  # 10%를 검증용으로
+
+# 또는 직접 지정 (0으로 설정 시 자동 계산)
+USE_TRAIN_SAMPLES = 0   # 0: 자동
+USE_VAL_SAMPLES = 0     # 0: 자동
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# 챗 템플릿 설정 ⭐ V9.1 핵심 수정!
+# 학습 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-USE_CHAT_TEMPLATE = True  # apply_chat_template 사용 (강력 권장!)
-USE_SYSTEM_MESSAGE = True # System message 사용 (권장)
+NUM_EPOCHS = 5  # V10: 고품질 데이터로 5 에포크
 
-# ⭐ V9.1: System message 간결화!
-# Before: "You are a research paper summarization expert. Summarize papers concisely and accurately in exactly 2 sentences, maximum 45 words. Focus on the main contribution and key results."
-# After: 간결하게!
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 챗 템플릿 설정
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+USE_CHAT_TEMPLATE = True
+USE_SYSTEM_MESSAGE = True
+
 SYSTEM_MESSAGE = "You are a research paper summarization expert. Always respond with exactly 2 sentences, maximum 45 words."
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -70,59 +72,21 @@ TEMPERATURE = 0.7
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 후처리 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-POST_PROCESS_MODE = "smart"  # "smart": 안전, "aggressive": 적극적
-
-ENABLE_COPY_DETECTION = True  # 복사 감지
-COPY_DETECTION_THRESHOLD = 0.5  # 50% 이상 겹침 = 복사
+POST_PROCESS_MODE = "smart"
+ENABLE_COPY_DETECTION = True
+COPY_DETECTION_THRESHOLD = 0.5
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 테스트 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NUM_RANDOM_TESTS = 3  # 랜덤 테스트 개수
+NUM_RANDOM_TESTS = 3
 
-# ================================================================
-# 📊 현재 설정 요약
-# ================================================================
-print("\n" + "="*60)
-print("⚙️  V9.1 현재 설정")
-print("="*60)
-print(f"실행 모드: {'전체 실행' if MODE == 0 else '랜덤 테스트만'}")
-print(f"파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함'}")
-print(f"Chat Template: {'사용 ✅ (Qwen 공식)' if USE_CHAT_TEMPLATE else '미사용'}")
-print(f"System Message: {'사용 ✅ (간결화)' if USE_SYSTEM_MESSAGE else '미사용'}")
-if USE_SYSTEM_MESSAGE:
-    print(f'  → "{SYSTEM_MESSAGE}"')
-if ENABLE_FINETUNING:
-    print(f"학습 데이터: Train {TRAIN_SAMPLES}개 + Val {VAL_SAMPLES}개")
-    print(f"학습 에포크: {NUM_EPOCHS}")
-    print(f"Temperature: {TEMPERATURE}")
-    print(f"예상 시간: ~{TRAIN_SAMPLES * NUM_EPOCHS // 2}분")
-print(f"후처리: {POST_PROCESS_MODE}")
-print(f"복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'}")
-print(f"랜덤 테스트: {NUM_RANDOM_TESTS}개")
-print("="*60)
-
-# ================================================================
-
-import subprocess
-import sys
-import os
-from pathlib import Path
-
-print("\n" + "="*60)
-print("🚀 STEP 0.3 V9.1 - Chat Template 최적화")
-print("="*60)
-
-
-# ================================================================
-# 🔧 V9.1 후처리 함수 (V9에서 개선)
 # ================================================================
 
 import re
 
+# 후처리 함수
 def detect_copy(text, original_article, ngram_size=5):
-    """복사 감지 로직 (5-gram 겹침 체크)"""
-    
     if not ENABLE_COPY_DETECTION:
         return False
     
@@ -155,32 +119,14 @@ def detect_copy(text, original_article, ngram_size=5):
     copy_ratio = copy_count / total_ngrams
     return copy_ratio > COPY_DETECTION_THRESHOLD
 
-
-def clean_output_v91(raw_text, original_article=""):
-    """V9.1 후처리 (V9 개선)"""
-    
-    # STEP 0: 불필요한 단어들 완전 제거
+def clean_output_v10(raw_text, original_article=""):
     text = raw_text
     
-    # System/User/Assistant 제거
-    text = re.sub(r'\bsystem\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\buser\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\bassistant\b', '', text, flags=re.IGNORECASE)
-    
-    # "You are" 패턴 제거
-    text = re.sub(r'\byou\s+are\s+a\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\byou\s+are\s+an\b', '', text, flags=re.IGNORECASE)
-    
-    # System message 관련 패턴
-    text = re.sub(r'research\s+paper\s+summarization\s+expert', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'always\s+respond\s+with', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'exactly\s+2\s+sentences', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'maximum\s+45\s+words', '', text, flags=re.IGNORECASE)
-    
-    # 공백 정리
+    text = re.sub(r'\b(system|user|assistant)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\byou\s+are\s+(a|an)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'research\s+paper|always\s+respond|maximum\s+45', '', text, flags=re.IGNORECASE)
     text = re.sub(r'\s+', ' ', text).strip()
     
-    # STEP 1: 시작 지점 찾기
     if "Summary:" in text:
         text = text.split("Summary:")[-1].strip()
     elif "Brief:" in text:
@@ -193,44 +139,27 @@ def clean_output_v91(raw_text, original_article=""):
         else:
             text = text.split("<|im_start|>")[-1].strip()
     
-    # STEP 2: 특수 구분자 제거
-    text = re.sub(r'#{1,}', '', text)
-    text = re.sub(r'={3,}', '', text)
-    text = re.sub(r'-{3,}', '', text)
+    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
     
-    # STEP 3: 프롬프트 패턴 제거
     prompt_patterns = [
-        r'(?i)paper\s*:',
-        r'(?i)brief\s*:',
-        r'(?i)summary\s*:',
-        r'(?i)summarize',
-        r'(?i)this\s+paper',
-        r'<\|im_start\|>',
-        r'<\|im_end\|>',
+        r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
+        r'<\|im_start\|>', r'<\|im_end\|>',
     ]
-    
     for pattern in prompt_patterns:
         text = re.sub(pattern, '', text)
     
-    # STEP 4: LaTeX 제거
     latex_patterns = [r'\$+', r'\\[a-zA-Z]+', r'@xmath\d+', r'@xcite']
     for pattern in latex_patterns:
         text = re.sub(pattern, '', text)
     
-    # STEP 5: 특수 문자 정리
     text = re.sub(r'```', '', text)
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\.\.+', '.', text)
     text = text.strip()
     
-    # STEP 6: 빈 텍스트 체크
     if not text or len(text) < 20:
         return "[요약 생성 실패 - 출력 없음]"
     
-    # STEP 7: 복사 감지 (경고만, 차단 안 함)
-    # 복사 여부는 플래그로만 표시
-    
-    # STEP 8: 문장 분리 및 선택
     sentences = re.split(r'(?<=[.!?])\s+', text)
     sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 5]
     
@@ -243,7 +172,6 @@ def clean_output_v91(raw_text, original_article=""):
             s += '.'
         cleaned_sentences.append(s)
     
-    # STEP 9: Smart 선택
     if len(cleaned_sentences) == 1:
         words = cleaned_sentences[0].split()
         if len(words) <= 45:
@@ -266,100 +194,10 @@ def clean_output_v91(raw_text, original_article=""):
         words = sentence1.split()
         return ' '.join(words[:45]) + '.'
 
-
-def clean_output_aggressive_v91(raw_text, original_article=""):
-    """V9.1 Aggressive: 2문장 강제"""
-    
-    # STEP 0: 불필요한 단어 제거
-    text = raw_text
-    text = re.sub(r'\b(system|user|assistant)\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\byou\s+are\s+(a|an)\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'research\s+paper|always\s+respond|maximum\s+45', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    # STEP 1-5
-    if "Summary:" in text:
-        text = text.split("Summary:")[-1].strip()
-    elif "Brief:" in text:
-        text = text.split("Brief:")[-1].strip()
-    elif "<|im_end|>" in text:
-        text = text.split("<|im_end|>")[-1].strip()
-    elif "<|im_start|>" in text:
-        if "assistant" in text:
-            text = text.split("assistant")[-1].strip()
-        else:
-            text = text.split("<|im_start|>")[-1].strip()
-    
-    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
-    
-    prompt_patterns = [
-        r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
-    ]
-    for pattern in prompt_patterns:
-        text = re.sub(pattern, '', text)
-    
-    text = re.sub(r'```', '', text)
-    text = re.sub(r'\s+', ' ', text).strip()
-    
-    if not text or len(text) < 20:
-        return "[요약 생성 실패]"
-    
-    # 복사 감지: 경고만
-    
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 5]
-    
-    if not sentences:
-        return "[요약 생성 실패]"
-    
-    cleaned_sentences = []
-    for s in sentences:
-        if not s[-1] in '.!?':
-            s += '.'
-        cleaned_sentences.append(s)
-    
-    if len(cleaned_sentences) == 1:
-        words = cleaned_sentences[0].split()
-        if len(words) <= 45:
-            return cleaned_sentences[0]
-        else:
-            return ' '.join(words[:45]) + '.'
-    
-    sentence1 = cleaned_sentences[0]
-    sentence2 = cleaned_sentences[1]
-    
-    words1 = sentence1.split()
-    words2 = sentence2.split()
-    total = len(words1) + len(words2)
-    
-    if total <= 45:
-        return f"{sentence1} {sentence2}"
-    
-    target1 = min(27, len(words1))
-    target2 = min(18, len(words2))
-    
-    truncated1 = ' '.join(words1[:target1])
-    truncated2 = ' '.join(words2[:target2])
-    
-    if not truncated1.endswith('.'):
-        truncated1 += '.'
-    if not truncated2.endswith('.'):
-        truncated2 += '.'
-    
-    return f"{truncated1} {truncated2}"
-
-
 def clean_output(raw_text, original_article=""):
-    """선택된 모드로 후처리"""
-    if POST_PROCESS_MODE == "aggressive":
-        return clean_output_aggressive_v91(raw_text, original_article)
-    else:
-        return clean_output_v91(raw_text, original_article)
+    return clean_output_v10(raw_text, original_article)
 
-
-print(f"\n✅ 후처리 함수 V9.1 로드 완료 ({POST_PROCESS_MODE} 모드)")
-print(f"   복사 감지: {'사용 ✅' if ENABLE_COPY_DETECTION else '미사용'}")
-
+print(f"\n✅ 후처리 함수 V10 로드 완료")
 
 # ================================================================
 # MODE 0: 전체 실행
@@ -384,7 +222,7 @@ if MODE == 0:
                    check=True)
     
     print("📥 나머지 패키지 설치 중...")
-    packages = ["transformers", "datasets", "accelerate", "peft"]
+    packages = ["transformers", "datasets", "accelerate", "peft", "pandas"]
     for pkg in packages:
         subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", pkg],
                       capture_output=True, check=True)
@@ -404,9 +242,10 @@ if MODE == 0:
     import json
     import csv
     import random
+    import pandas as pd
     from datetime import datetime
     from pathlib import Path
-    from datasets import load_dataset
+    from datasets import Dataset
     from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig, TrainingArguments, Trainer, DataCollatorForLanguageModeling
     from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training, PeftModel
     from google.colab import drive
@@ -438,7 +277,7 @@ if MODE == 0:
     
     # 설정
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9.1-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V10-FINAL"
     RESULTS_DIR = Path(OUTPUT_DIR) / "results"
     
     Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
@@ -446,60 +285,101 @@ if MODE == 0:
     
     print(f"\n⚙️ 설정:")
     print(f"  모델: Qwen2.5-1.5B-Instruct")
-    print(f"  Chat Template: {'사용 ✅' if USE_CHAT_TEMPLATE else '미사용'}")
-    print(f"  System Message: {'사용 ✅ (간결)' if USE_SYSTEM_MESSAGE else '미사용'}")
-    print(f"  파인튜닝: {'사용' if ENABLE_FINETUNING else '사용 안 함'}")
-    print(f"  샘플: Train {TRAIN_SAMPLES}, Val {VAL_SAMPLES}")
-    print(f"  에포크: {NUM_EPOCHS}")
+    print(f"  버전: V10 (고품질 학습)")
+    print(f"  데이터 소스: {DATA_DIR}")
     print(f"  출력: {OUTPUT_DIR}")
     
     # ============================================================
-    # STEP 3: 데이터 준비
+    # STEP 3: V10 데이터 로드 ⭐ 핵심!
     # ============================================================
     
     print("\n" + "="*60)
-    print("📥 STEP 3: 데이터 준비")
+    print("📥 STEP 3: V10 데이터 로드 (SummaryDataSet)")
     print("="*60)
     
-    def clean_arxiv_text(text):
-        if not isinstance(text, str):
-            return ""
-        text = re.sub(r'@xmath\d+', '', text)
-        text = re.sub(r'@xcite', '', text)
-        text = re.sub(r'@xref', '', text)
-        text = re.sub(r'\$.*?\$', '', text)
-        text = re.sub(r'\\[a-zA-Z]+\{.*?\}', '', text)
-        text = re.sub(r'\s+', ' ', text)
-        text = re.sub(r'\.\.+', '.', text)
-        text = re.sub(r'--+', '-', text)
-        return text.strip()
+    data_path = Path(DATA_DIR) / DATA_FILE
     
-    print("📥 ArXiv 데이터 로딩...")
-    dataset = load_dataset("ccdv/arxiv-summarization", split=f"train[:{TRAIN_SAMPLES + VAL_SAMPLES}]")
-    print(f"✅ {len(dataset)}개 로드")
+    if not data_path.exists():
+        raise FileNotFoundError(f"❌ 데이터 파일 없음: {data_path}\n"
+                               f"→ Step 1을 먼저 실행하세요!")
     
-    print("🔄 전처리 중...")
-    dataset = dataset.map(lambda x: {
-        'article': clean_arxiv_text(x['article']),
-        'abstract': clean_arxiv_text(x['abstract'])
-    })
+    print(f"📥 데이터 로딩: {data_path}")
+    df = pd.read_csv(data_path)
     
-    print("✂️ Train/Val 분할...")
-    dataset = dataset.train_test_split(test_size=VAL_SAMPLES, seed=42)
-    train_dataset = dataset['train']
-    val_dataset = dataset['test']
+    # 성공한 샘플만 사용
+    df_success = df[df['gpt4_success'] == True].copy()
+    print(f"✅ 원본 데이터: {len(df)}개")
+    print(f"✅ 성공 데이터: {len(df_success)}개")
     
-    print(f"✅ Train: {len(train_dataset)}, Val: {len(val_dataset)}")
+    if len(df_success) == 0:
+        raise ValueError(f"❌ 성공한 데이터 없음!\n"
+                        f"→ Step 1을 다시 실행하세요!")
+    
+    # 데이터량 자동 계산
+    total_available = len(df_success)
+    
+    if USE_VAL_SAMPLES == 0:
+        # 자동 계산
+        val_samples = max(10, int(total_available * VAL_RATIO))
+        train_samples = total_available - val_samples
+    else:
+        # 직접 지정
+        val_samples = USE_VAL_SAMPLES
+        if USE_TRAIN_SAMPLES == 0:
+            train_samples = total_available - val_samples
+        else:
+            train_samples = USE_TRAIN_SAMPLES
+    
+    # 검증
+    if train_samples + val_samples > total_available:
+        print(f"\n⚠️ 요청한 데이터량이 사용 가능한 양보다 많습니다!")
+        print(f"  요청: {train_samples + val_samples}개")
+        print(f"  가능: {total_available}개")
+        print(f"\n자동으로 조정합니다...")
+        val_samples = max(10, int(total_available * VAL_RATIO))
+        train_samples = total_available - val_samples
+    
+    print(f"\n📊 데이터 분할:")
+    print(f"  사용 가능: {total_available}개")
+    print(f"  Train: {train_samples}개 ({train_samples/total_available*100:.1f}%)")
+    print(f"  Val: {val_samples}개 ({val_samples/total_available*100:.1f}%)")
+    print(f"  총 사용: {train_samples + val_samples}개")
+    
+    # Train/Val 분할
+    df_success = df_success.sample(frac=1, random_state=42).reset_index(drop=True)
+    
+    train_df = df_success[:train_samples]
+    val_df = df_success[train_samples:train_samples + val_samples]
+    
+    # Dataset 변환
+    train_dataset = Dataset.from_pandas(train_df[['article', 'gpt4_summary']])
+    val_dataset = Dataset.from_pandas(val_df[['article', 'gpt4_summary']])
+    
+    # 통계
+    print(f"\n📊 GPT-4 요약 통계:")
+    print(f"  평균 단어: {train_df['gpt4_words'].mean():.1f}")
+    print(f"  평균 문장: {train_df['gpt4_sentences'].mean():.1f}")
+    print(f"  45단어 이하: {(train_df['gpt4_words'] <= 45).sum()}/{len(train_df)} ({(train_df['gpt4_words'] <= 45).sum()/len(train_df)*100:.1f}%)")
+    print(f"  2문장: {(train_df['gpt4_sentences'] == 2).sum()}/{len(train_df)} ({(train_df['gpt4_sentences'] == 2).sum()/len(train_df)*100:.1f}%)")
+    
+    print("\n📋 데이터 예시:")
+    sample = train_df.iloc[0]
+    print(f"{'='*60}")
+    print(f"원본 초록 ({sample['original_words']}단어):")
+    print(f"  {sample['original_abstract'][:150]}...")
+    print()
+    print(f"GPT-4 요약 ({sample['gpt4_words']}단어, {sample['gpt4_sentences']}문장):")
+    print(f"  {sample['gpt4_summary']}")
+    print(f"{'='*60}")
     
     # ============================================================
-    # STEP 4: V9.1 프롬프트 적용 (개선!) ⭐⭐⭐
+    # STEP 4: V10 프롬프트 적용
     # ============================================================
     
     print("\n" + "="*60)
-    print("📝 STEP 4: V9.1 프롬프트 적용 (개선!)")
+    print("📝 STEP 4: V10 프롬프트 적용")
     print("="*60)
     
-    # 토크나이저 로드
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -507,64 +387,45 @@ if MODE == 0:
     
     print("✅ 토크나이저 로드")
     
-    def formatting_prompts_func_v91(example):
-        """V9.1: System 간결화 + User 프롬프트 제거!"""
-        
+    def formatting_prompts_func_v10(example):
         messages = []
         
-        # System message (간결하게!)
         if USE_SYSTEM_MESSAGE:
             messages.append({
                 "role": "system",
                 "content": SYSTEM_MESSAGE
             })
         
-        # ⭐ V9.1 핵심: User는 논문만! 프롬프트 제거!
         messages.append({
             "role": "user",
-            "content": example['article']  # 논문만!
+            "content": example['article']
         })
         
-        # Assistant
         messages.append({
             "role": "assistant",
-            "content": example['abstract']
+            "content": example['gpt4_summary']
         })
         
-        # apply_chat_template
         if USE_CHAT_TEMPLATE:
             text = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=False  # 학습 시 False
+                add_generation_prompt=False
             )
         else:
-            # Fallback
-            text = f"Summarize this paper in 2 sentences (max 45 words):\n\n{example['article']}\n\nSummary: {example['abstract']}"
+            text = f"Summarize this paper in 2 sentences (max 45 words):\n\n{example['article']}\n\nSummary: {example['gpt4_summary']}"
         
         return {"text": text}
     
-    print("🔄 V9.1 프롬프트 적용 중...")
-    print(f"  System: {USE_SYSTEM_MESSAGE}")
-    if USE_SYSTEM_MESSAGE:
-        print(f'    → "{SYSTEM_MESSAGE}"')
-    print(f"  User: 논문만! (프롬프트 제거)")
+    print("🔄 V10 프롬프트 적용 중...")
     
-    train_dataset = train_dataset.map(formatting_prompts_func_v91)
-    val_dataset = val_dataset.map(formatting_prompts_func_v91)
-    
-    # 프롬프트 예시
-    print("\n📋 프롬프트 예시:")
-    print("-"*60)
-    sample_text = train_dataset[0]['text']
-    # 처음 500자만 (논문은 길어서)
-    print(sample_text[:500] + "...")
-    print("-"*60)
+    train_dataset = train_dataset.map(formatting_prompts_func_v10)
+    val_dataset = val_dataset.map(formatting_prompts_func_v10)
     
     print("✅ 프롬프트 적용 완료")
     
     # ============================================================
-    # STEP 5-8: 학습 (ENABLE_FINETUNING=True일 때만)
+    # STEP 5-8: 학습 (나머지는 동일)
     # ============================================================
     
     if ENABLE_FINETUNING:
@@ -581,10 +442,6 @@ if MODE == 0:
         train_dataset_tokenized = train_dataset.map(tokenize_function, remove_columns=train_dataset.column_names)
         val_dataset_tokenized = val_dataset.map(tokenize_function, remove_columns=val_dataset.column_names)
         print("✅ 토크나이즈 완료")
-        
-        # ========================================================
-        # STEP 6: 모델 로딩
-        # ========================================================
         
         print("\n" + "="*60)
         print("🚀 STEP 6: 모델 로딩 (4-bit)")
@@ -620,12 +477,8 @@ if MODE == 0:
         print("\n📊 학습 가능한 파라미터:")
         model.print_trainable_parameters()
         
-        # ========================================================
-        # STEP 7: 학습
-        # ========================================================
-        
         print("\n" + "="*60)
-        print("🎯 STEP 7: 모델 학습")
+        print("🎯 STEP 7: 모델 학습 (V10)")
         print("="*60)
         
         training_args = TrainingArguments(
@@ -638,7 +491,7 @@ if MODE == 0:
             save_steps=50,
             eval_strategy="steps",
             eval_steps=50,
-            warmup_steps=5,
+            warmup_steps=10,
             fp16=True,
             report_to="none",
             max_grad_norm=1.0
@@ -653,19 +506,14 @@ if MODE == 0:
         )
         
         print("\n🏋️ 학습 시작...")
+        print(f"  데이터: {train_samples}개 (GPT-4 고품질)")
         print(f"  Epochs: {NUM_EPOCHS}")
-        print(f"  Batch size: 1 × 4 = 4")
-        print(f"  V9.1 개선: System 간결 + User 프롬프트 제거")
-        print(f"  예상 시간: ~{TRAIN_SAMPLES * NUM_EPOCHS // 2}분")
+        print(f"  예상 시간: ~{train_samples * NUM_EPOCHS // 3}분")
         print()
         
         trainer.train()
         
         print("\n✅ 학습 완료!")
-        
-        # ========================================================
-        # STEP 8: 저장
-        # ========================================================
         
         print("\n" + "="*60)
         print("💾 STEP 8: 모델 저장")
@@ -680,48 +528,39 @@ if MODE == 0:
         # 메타데이터
         metadata = {
             "model": BASE_MODEL,
-            "version": "V9.1",
-            "chat_template": USE_CHAT_TEMPLATE,
-            "system_message": USE_SYSTEM_MESSAGE,
-            "system_message_content": SYSTEM_MESSAGE if USE_SYSTEM_MESSAGE else None,
-            "user_prompt": "논문만 (프롬프트 제거)",
-            "improvements": "System 간결화 + User 프롬프트 제거 + 중복 제거",
-            "train_samples": TRAIN_SAMPLES,
-            "val_samples": VAL_SAMPLES,
+            "version": "V10",
+            "data_source": f"{DATA_DIR}/{DATA_FILE}",
+            "train_samples": train_samples,
+            "val_samples": val_samples,
             "num_epochs": NUM_EPOCHS,
-            "temperature": TEMPERATURE,
+            "gpt4_avg_words": float(train_df['gpt4_words'].mean()),
+            "gpt4_avg_sentences": float(train_df['gpt4_sentences'].mean()),
             "timestamp": datetime.now().isoformat()
         }
         
         with open(final_model_path / "metadata.json", 'w') as f:
             json.dump(metadata, f, indent=2)
         
-        # 정리
         del model, trainer
         gc.collect()
         torch.cuda.empty_cache()
         
-        print("\n" + "="*60)
-        print("✅ STEP 1-8 완료!")
-        print("="*60)
+        print("\n✅ STEP 1-8 완료!")
     
     else:
-        print("\n" + "="*60)
-        print("⏭️  파인튜닝 건너뛰기")
-        print("="*60)
+        print("\n⏭️  파인튜닝 건너뛰기")
+        final_model_path = None
     
     # ============================================================
-    # A/B 테스트 (V9.1)
+    # A/B 테스트
     # ============================================================
     
     print("\n" + "="*60)
-    print("🔬 A/B 테스트 (V9.1)")
+    print("🔬 A/B 테스트 (V10)")
     print("="*60)
     
-    # V9.1 프롬프트 생성
-    def make_prompt_v91(article):
-        """V9.1: System 간결 + User 논문만"""
-        
+    def make_prompt_v10(article):
+        """V10 프롬프트 생성"""
         messages = []
         
         if USE_SYSTEM_MESSAGE:
@@ -730,17 +569,16 @@ if MODE == 0:
                 "content": SYSTEM_MESSAGE
             })
         
-        # ⭐ V9.1: 논문만!
         messages.append({
             "role": "user",
-            "content": article  # 논문만!
+            "content": article
         })
         
         if USE_CHAT_TEMPLATE:
             prompt = tokenizer.apply_chat_template(
                 messages,
                 tokenize=False,
-                add_generation_prompt=True  # 추론 시 True
+                add_generation_prompt=True
             )
         else:
             prompt = f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
@@ -761,7 +599,7 @@ if MODE == 0:
     qwen_base.eval()
     print("  ✅ 베이스 모델")
     
-    if ENABLE_FINETUNING:
+    if ENABLE_FINETUNING and final_model_path:
         qwen_ft = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
             quantization_config=BitsAndBytesConfig(
@@ -772,7 +610,7 @@ if MODE == 0:
         )
         qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
         qwen_ft.eval()
-        print("  ✅ 파인튜닝 모델 (V9.1)")
+        print("  ✅ 파인튜닝 모델 (V10)")
     else:
         qwen_ft = None
         print("  ⏭️  파인튜닝 모델 없음")
@@ -780,24 +618,14 @@ if MODE == 0:
     # 테스트 데이터
     print("\n📥 테스트용 논문 로딩...")
     
-    if 'val_dataset' not in locals():
-        dataset_temp = load_dataset("ccdv/arxiv-summarization", split=f"train[:{TRAIN_SAMPLES + VAL_SAMPLES}]")
-        dataset_temp = dataset_temp.map(lambda x: {
-            'article': clean_arxiv_text(x['article']),
-            'abstract': clean_arxiv_text(x['abstract'])
-        })
-        dataset_temp = dataset_temp.train_test_split(test_size=VAL_SAMPLES, seed=42)
-        val_dataset_raw = dataset_temp['test']
-    else:
-        val_dataset_raw = val_dataset
-    
     tests = []
-    for i in range(min(3, len(val_dataset_raw))):
-        paper = val_dataset_raw[i]
+    for i in range(min(3, len(val_df))):
+        paper = val_df.iloc[i]
         tests.append({
             "id": i + 1,
             "article": paper['article'],
-            "abstract": paper['abstract']
+            "original_abstract": paper['original_abstract'],
+            "gpt4_summary": paper['gpt4_summary']
         })
     
     print(f"  ✅ {len(tests)}개 논문 로드")
@@ -809,7 +637,7 @@ if MODE == 0:
     for i, test in enumerate(tests):
         print(f"  Test {i+1}/3...", end=" ")
         
-        prompt = make_prompt_v91(test['article'])
+        prompt = make_prompt_v10(test['article'])
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_base.device)
         
         # 베이스
@@ -821,7 +649,6 @@ if MODE == 0:
                 no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
             )
         
-        # 생성된 부분만 추출
         generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
         base_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
         base_summary = clean_output(base_raw, test['article'])
@@ -849,7 +676,8 @@ if MODE == 0:
             "test_id": test['id'],
             "article": test['article'],
             "article_length": len(test['article']),
-            "target": test['abstract'],
+            "original_abstract": test['original_abstract'],
+            "gpt4_target": test['gpt4_summary'],
             "base_summary": base_summary,
             "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
             "base_copy_detected": base_is_copy,
@@ -862,19 +690,19 @@ if MODE == 0:
     
     # 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_file = RESULTS_DIR / f"ab_test_v91_{timestamp}.json"
+    json_file = RESULTS_DIR / f"ab_test_v10_{timestamp}.json"
     
     with open(json_file, 'w', encoding='utf-8') as f:
         json.dump({
             "metadata": {
-                "version": "V9.1",
-                "improvements": "System 간결화 + User 프롬프트 제거",
-                "chat_template": USE_CHAT_TEMPLATE,
-                "system_message": USE_SYSTEM_MESSAGE,
-                "system_content": SYSTEM_MESSAGE if USE_SYSTEM_MESSAGE else None,
+                "version": "V10",
+                "data_source": f"{DATA_DIR}/{DATA_FILE}",
                 "finetuning": ENABLE_FINETUNING,
-                "train_samples": TRAIN_SAMPLES,
+                "train_samples": train_samples,
+                "val_samples": val_samples,
                 "num_epochs": NUM_EPOCHS,
+                "gpt4_avg_words": float(train_df['gpt4_words'].mean()),
+                "gpt4_avg_sentences": float(train_df['gpt4_sentences'].mean()),
                 "temperature": TEMPERATURE,
                 "timestamp": datetime.now().isoformat()
             },
@@ -904,49 +732,44 @@ if MODE == 0:
         
         if ft_valid:
             avg_ft = sum(r['ft_words'] for r in ft_valid) / len(ft_valid)
-            print(f"V9.1 FT: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
+            print(f"V10 FT: {avg_ft:.1f}단어 ({len(ft_valid)}/3 성공)")
             print(f"  복사 감지: {ft_copy}건")
         else:
-            print(f"V9.1 FT: 0/3 성공")
+            print(f"V10 FT: 0/3 성공")
     
     print("\n샘플:")
     for r in all_results[:2]:
         print(f"\n논문 (길이: {r['article_length']}자):")
         print("-"*60)
-        print(r['article'][:300] + "...")
+        print(r['article'][:200] + "...")
+        print("-"*60)
+        print(f"GPT-4 타겟: {r['gpt4_target']}")
         print("-"*60)
         copy_flag_base = " ⚠️ 복사 감지" if r['base_copy_detected'] else ""
         print(f"베이스: {r['base_summary']}{copy_flag_base}")
         if ENABLE_FINETUNING:
             copy_flag_ft = " ⚠️ 복사 감지" if r['ft_copy_detected'] else ""
-            print(f"V9.1 FT: {r['ft_summary']}{copy_flag_ft}")
+            print(f"V10 FT: {r['ft_summary']}{copy_flag_ft}")
     
     print("\n" + "="*60)
     print("✅ A/B 완료!")
     print("="*60)
     
-    # ============================================================
-    # LLM 분석용 프롬프트 생성
-    # ============================================================
-    
+    # LLM 분석용 프롬프트
     print("\n" + "="*60)
     print("📝 LLM 분석용 프롬프트 생성")
     print("="*60)
     
-    analysis_prompt = f"""다음은 ArXiv 논문 요약 모델(V9.1)의 A/B 테스트 결과입니다.
+    analysis_prompt = f"""다음은 ArXiv 논문 요약 모델(V10)의 A/B 테스트 결과입니다.
 
 ## 모델 설정
 
-**버전:** V9.1 (Chat Template 최적화)
-**개선 사항:**
-- System message 간결화: 50단어 → 20단어
-- User 프롬프트 제거: "Summarize..." + 논문 → 논문만
-- 중복 지시사항 제거
-
-**Chat Template:** 사용 ✅
-**System Message:** "{SYSTEM_MESSAGE}"
-**학습:** {TRAIN_SAMPLES}개 × {NUM_EPOCHS} 에포크
-**Temperature:** {TEMPERATURE}
+**버전:** V10 (GPT-4 고품질 학습)
+**데이터 소스:** {DATA_DIR}/{DATA_FILE}
+**학습 데이터:** {train_samples}개
+**검증 데이터:** {val_samples}개
+**에포크:** {NUM_EPOCHS}
+**GPT-4 품질:** {train_df['gpt4_words'].mean():.1f}단어, {train_df['gpt4_sentences'].mean():.1f}문장
 
 ## 테스트 결과
 
@@ -961,9 +784,9 @@ if MODE == 0:
 {r['article']}
 ```
 
-**원본 초록:**
+**GPT-4 타겟 요약:**
 ```
-{r['target']}
+{r['gpt4_target']}
 ```
 
 **베이스:**
@@ -976,7 +799,7 @@ if MODE == 0:
 """
         
         if ENABLE_FINETUNING and r['ft_summary'] != "N/A (파인튜닝 미사용)":
-            analysis_prompt += f"""**V9.1 파인튜닝:**
+            analysis_prompt += f"""**V10 파인튜닝:**
 ```
 {r['ft_summary']}
 ```
@@ -989,16 +812,17 @@ if MODE == 0:
 ## 분석 요청
 
 1. **형식**: 2문장, 45단어 이하?
-2. **내용**: 핵심 요약?
-3. **V9.1 개선 효과**: System 간결화 + User 프롬프트 제거가 효과있었나?
+2. **내용**: GPT-4 타겟과 비교했을 때 품질은?
+3. **V10 개선 효과**: GPT-4 고품질 학습이 효과있었나?
 4. **점수**: 각 출력에 10점 만점 점수
+5. **V9.1 대비**: V9.1(3.3/10) 대비 얼마나 개선되었나?
 
 ---
 
 **상세 분석 부탁드립니다!**
 """
     
-    prompt_file = RESULTS_DIR / f"analysis_prompt_v91_{timestamp}.txt"
+    prompt_file = RESULTS_DIR / f"analysis_prompt_v10_{timestamp}.txt"
     with open(prompt_file, 'w', encoding='utf-8') as f:
         f.write(analysis_prompt)
     
@@ -1007,32 +831,39 @@ if MODE == 0:
     print("\n" + "="*60)
     print("✅ 완료!")
     print("="*60)
-
+    
+    print(f"\n📁 저장 위치:")
+    print(f"  모델: {OUTPUT_DIR}/final_model/")
+    print(f"  결과: {json_file}")
+    print(f"  프롬프트: {prompt_file}")
+    print(f"  데이터: {DATA_DIR}/{DATA_FILE}")
 
 # ================================================================
-# 랜덤 테스트 (V9.1)
+# MODE 1: 랜덤 테스트
 # ================================================================
-
-print("\n" + "="*60)
-print("🎲 랜덤 테스트 (V9.1)")
-print("="*60)
 
 if MODE == 1:
+    print("\n" + "="*60)
+    print("🎲 랜덤 테스트 (V10)")
+    print("="*60)
+    
     import torch, gc, json, random
     from datetime import datetime
     from pathlib import Path
-    from datasets import load_dataset
     from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
     from peft import PeftModel
+    import pandas as pd
     
     BASE_MODEL = "Qwen/Qwen2.5-1.5B-Instruct"
-    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V9.1-FINAL"
+    OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V10-FINAL"
     final_model_path = Path(OUTPUT_DIR) / "final_model"
     
+    # 토크나이저
     tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
     
+    # 모델 로드
     if ENABLE_FINETUNING:
         if not final_model_path.exists():
             raise FileNotFoundError(f"모델 없음: {final_model_path}")
@@ -1047,7 +878,7 @@ if MODE == 1:
         )
         qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
         qwen_ft.eval()
-        print("✅ V9.1 모델 로드")
+        print("✅ V10 모델 로드")
     else:
         qwen_ft = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
@@ -1059,120 +890,101 @@ if MODE == 1:
         )
         qwen_ft.eval()
         print("✅ 베이스 모델 로드")
-
-# 데이터
-def clean_arxiv_text(text):
-    if not isinstance(text, str):
-        return ""
-    text = re.sub(r'@xmath\d+|@xcite|@xref|\$.*?\$|\\[a-zA-Z]+\{.*?\}', '', text)
-    text = re.sub(r'\s+', ' ', text)
-    return text.strip()
-
-full_dataset = load_dataset("ccdv/arxiv-summarization", split="train[:1000]")
-full_dataset = full_dataset.map(lambda x: {'article': clean_arxiv_text(x['article']), 'abstract': clean_arxiv_text(x['abstract'])})
-print(f"✅ 1000개 로드")
-
-random_indices = random.sample(range(len(full_dataset)), NUM_RANDOM_TESTS)
-print(f"인덱스: {random_indices}")
-
-# V9.1 프롬프트
-def make_prompt_v91(article):
-    """V9.1: System 간결 + User 논문만"""
     
-    messages = []
+    # 데이터 로드
+    data_path = Path(DATA_DIR) / DATA_FILE
+    if not data_path.exists():
+        raise FileNotFoundError(f"데이터 없음: {data_path}")
     
-    if USE_SYSTEM_MESSAGE:
-        messages.append({
-            "role": "system",
-            "content": SYSTEM_MESSAGE
-        })
+    df = pd.read_csv(data_path)
+    df_success = df[df['gpt4_success'] == True]
     
-    messages.append({
-        "role": "user",
-        "content": article  # 논문만!
-    })
+    print(f"✅ {len(df_success)}개 로드")
     
-    if USE_CHAT_TEMPLATE:
-        prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True
-        )
-    else:
-        prompt = f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
+    random_indices = random.sample(range(len(df_success)), min(NUM_RANDOM_TESTS, len(df_success)))
+    print(f"인덱스: {random_indices}")
     
-    return prompt
-
-print("\n🔮 추론 시작...")
-
-for i, idx in enumerate(random_indices):
-    paper = full_dataset[idx]
+    def make_prompt_v10(article):
+        messages = []
+        if USE_SYSTEM_MESSAGE:
+            messages.append({"role": "system", "content": SYSTEM_MESSAGE})
+        messages.append({"role": "user", "content": article})
+        if USE_CHAT_TEMPLATE:
+            return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        else:
+            return f"Summarize this paper in 2 sentences (max 45 words):\n\n{article}\n\nSummary:"
     
-    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print(f"📄 테스트 {i+1}/{NUM_RANDOM_TESTS} (인덱스: {idx})")
-    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print("\n🔮 추론 시작...")
     
-    print(f"\n📖 논문 (처음 500자):")
-    print("-"*60)
-    print(paper['article'][:500] + "...")
-    print("-"*60)
-    
-    print(f"\n📌 원본 초록:")
-    print("-"*60)
-    print(paper['abstract'])
-    print("-"*60)
-    
-    print(f"\n🔮 V9.1 추론 중...")
-    
-    prompt = make_prompt_v91(paper['article'])
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_ft.device)
-    
-    with torch.no_grad():
-        outputs = qwen_ft.generate(
-            **inputs, max_new_tokens=80, min_length=30, 
-            temperature=TEMPERATURE,
-            do_sample=True, top_p=0.9, repetition_penalty=1.2,
-            no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
-        )
-    
-    generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
-    raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-    clean = clean_output(raw_output, paper['article'])
-    
-    is_copy = detect_copy(clean, paper['article']) if clean and '[' not in clean else False
-    
-    print(f"\n📰 V9.1 요약:")
-    print("="*60)
-    print(clean)
-    if is_copy:
-        print("\n⚠️ 복사 경고: 5-gram 분석 결과 논문과 겹침 감지")
-    print("="*60)
-    
-    is_failed = '[' in clean
-    word_count = 0 if is_failed else len(clean.split())
-    sentence_count = 0 if is_failed else len([s for s in re.split(r'[.!?]+', clean) if s.strip()])
-    
-    print(f"\n📊 통계:")
-    print(f"  성공: {'❌' if is_failed else '✅'}")
-    if is_copy:
-        print(f"  복사 경고: ⚠️")
-    if not is_failed:
-        print(f"  단어: {word_count}")
-        print(f"  문장: {sentence_count}")
-        print(f"  45단어: {'✅' if word_count <= 45 else '❌'}")
-        print(f"  2문장: {'✅' if sentence_count == 2 else '⚠️ ' + str(sentence_count)}")
+    for i, idx in enumerate(random_indices):
+        paper = df_success.iloc[idx]
+        
+        print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        print(f"📄 테스트 {i+1}/{len(random_indices)} (인덱스: {idx})")
+        print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+        
+        print(f"\n📖 논문 (처음 300자):")
+        print("-"*60)
+        print(paper['article'][:300] + "...")
+        print("-"*60)
+        
+        print(f"\n📌 GPT-4 타겟 요약:")
+        print("-"*60)
+        print(paper['gpt4_summary'])
+        print(f"({paper['gpt4_words']}단어, {paper['gpt4_sentences']}문장)")
+        print("-"*60)
+        
+        print(f"\n🔮 V10 추론 중...")
+        
+        prompt = make_prompt_v10(paper['article'])
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_ft.device)
+        
+        with torch.no_grad():
+            outputs = qwen_ft.generate(
+                **inputs, max_new_tokens=80, min_length=30, 
+                temperature=TEMPERATURE,
+                do_sample=True, top_p=0.9, repetition_penalty=1.2,
+                no_repeat_ngram_size=3, pad_token_id=tokenizer.pad_token_id
+            )
+        
+        generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+        raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        clean = clean_output(raw_output, paper['article'])
+        
+        is_copy = detect_copy(clean, paper['article']) if clean and '[' not in clean else False
+        
+        print(f"\n📰 V10 요약:")
+        print("="*60)
+        print(clean)
+        if is_copy:
+            print("\n⚠️ 복사 경고: 5-gram 분석 결과 논문과 겹침 감지")
+        print("="*60)
+        
+        is_failed = '[' in clean
+        word_count = 0 if is_failed else len(clean.split())
+        sentence_count = 0 if is_failed else len([s for s in re.split(r'[.!?]+', clean) if s.strip()])
+        
+        print(f"\n📊 통계:")
+        print(f"  성공: {'❌' if is_failed else '✅'}")
+        if is_copy:
+            print(f"  복사 경고: ⚠️")
+        if not is_failed:
+            print(f"  단어: {word_count}")
+            print(f"  문장: {sentence_count}")
+            print(f"  45단어: {'✅' if word_count <= 45 else '❌'}")
+            print(f"  2문장: {'✅' if sentence_count == 2 else '⚠️ ' + str(sentence_count)}")
 
 print("\n" + "="*60)
-print("✅ 완료!")
+print("🎉 V10 완료!")
 print("="*60)
 
-print("\n✨ V9.1 개선:")
-print("  ✅ System message 간결화 (50단어 → 20단어)")
-print("  ✅ User 프롬프트 제거 (논문만!)")
-print("  ✅ 중복 지시사항 제거")
-print(f"\n📁 출력: {OUTPUT_DIR}")
+print("\n✨ V10 핵심 개선:")
+print("  ✅ 데이터: /SummaryDataSet/ 자동 로드")
+print("  ✅ GPT-4 고품질 2문장 요약으로 학습")
+print("  ✅ 자동 데이터 분할")
+print("  ✅ 예상 성능: 7-8/10")
+print(f"\n📁 결과: {OUTPUT_DIR}")
+print(f"📁 데이터: {DATA_DIR}")
 
-print("\n🚀 V9.1 완성!")
-print("  V9 → V9.1: Chat Template 최적화")
-print("  예상 품질: 8-9/10 (V9 0-1/10)")
+print("\n🚀 V10 완성!")
 print("="*60)
