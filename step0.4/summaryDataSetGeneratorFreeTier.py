@@ -1,6 +1,6 @@
 """
 =================================================================
-📰 STEP 0.3: V10 Step 1 - 고품질 학습 데이터 생성 (ChatGPT FREE TIER 버전)
+📰 STEP 0.4: V1 - 고품질 학습 데이터 생성 (ChatGPT FREE TIER 버전)
 =================================================================
 
 🎯 목적:
@@ -33,7 +33,7 @@ import sys
 import os
 
 print("\n" + "="*60)
-print("🚀 V10 Step 1: 고품질 학습 데이터 생성 (FREE TIER)")
+print("🚀 STEP 0.4 V1: 고품질 학습 데이터 생성 (FREE TIER)")
 print("="*60)
 
 # ================================================================
@@ -79,7 +79,7 @@ if not Path("/content/drive").exists():
 print("✅ 마운트 완료")
 
 # 출력 디렉토리 설정
-OUTPUT_DIR = "/content/drive/MyDrive/arxiv-STEP0.3-V10-DATA"
+OUTPUT_DIR = "/content/drive/MyDrive/SummaryDataSet"
 Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
 print(f"✅ 출력 디렉토리: {OUTPUT_DIR}")
 
@@ -94,7 +94,7 @@ print("="*60)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 데이터 설정 (FREE TIER 제약)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NEW_SAMPLES = 50  # FREE TIER: 최대 150개/일 (안전하게)
+NEW_SAMPLES = 150  # FREE TIER: 최대 150개/일 (안전하게)
                    # 1000개 목표 → 7번 실행 필요
 START_INDEX = 0    # 시작 인덱스 (추가 모드에서 자동 설정됨)
 
@@ -167,8 +167,8 @@ SLEEP_BETWEEN_REQUESTS = 60 / REQUESTS_PER_MINUTE + 1  # ~21초 (안전하게)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 파일 이름
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DATA_FILE = "v10_training_data.csv"  # 최종 데이터 파일
-PROGRESS_FILE = "v10_progress.json"  # 진행 상황 저장
+DATA_FILE = "v1_training_data.csv"  # 최종 데이터 파일
+PROGRESS_FILE = "v1_progress.json"  # 진행 상황 저장
 
 # ================================================================
 # 설정 요약
@@ -581,7 +581,7 @@ if success_data:
     print(f"  1-3문장: {sum(1 for s in sentences if 1 <= s <= 3)}/{len(sentences)} ({sum(1 for s in sentences if 1 <= s <= 3)/len(sentences)*100:.1f}%)")
 
 print("\n" + "="*60)
-print("🎉 V10 Step 1 완료! (FREE TIER 버전)")
+print("🎉 STEP 0.4 V1 완료! (FREE TIER 버전)")
 print("="*60)
 
 total_created = len(all_data)
@@ -595,7 +595,7 @@ if remaining_to_1000 > 0:
     print(f"3. 1000개까지 {remaining_to_1000}개 남음 → 약 {runs_needed}번 더 실행 필요")
     print(f"   (자동으로 이어서 생성됨)")
 else:
-    print(f"3. ✅ 1000개 달성! V10 Step 2로 이동 가능")
+    print(f"3. ✅ 1000개 달성! 다음 STEP으로 이동 가능")
 
 print(f"\n현재 상태:")
 print(f"  총 데이터: {total_created}개")
