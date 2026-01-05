@@ -1,6 +1,7 @@
 """
 =================================================================
-📰 STEP 0.4: V1 - 고품질 학습 데이터 생성 (Multi-LLM 버전)
+📰 STEP 0.4: V3 - 고품질 학습 데이터 생성 (Multi-LLM 버전) 
+v3 업데이트: 실패된 요청은 데이터셋에 포함하지 않음
 =================================================================
 
 🎯 목적:
@@ -146,7 +147,7 @@ print(f"✅ 출력 디렉토리: {OUTPUT_DIR}")
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # 데이터 설정
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-NEW_SAMPLES = 150  # 1회 생성 샘플 수
+NEW_SAMPLES = 300  # 1회 생성 샘플 수
 START_INDEX = 0    # 시작 인덱스 (자동 설정됨)
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -204,7 +205,7 @@ MODEL_CONFIGS = {
         "sleep": 21,   # 60/3 + 1
     },
     1: {  # Gemini - 기본 모델 변경
-        "model": "gemini-2.5-flash",  # ✅ 기본값
+        "model": "models/gemini-pro-latest",  # ✅ 기본값
         "rpm": 15,     # FREE TIER
         "rpd": 1500,
         "sleep": 5,    # 60/15 + 1
@@ -656,6 +657,7 @@ print(f"   - 요청 간격: {current_config['sleep']}초")
 print(f"   - 예상 시간: ~{NEW_SAMPLES * current_config['sleep'] / 60:.0f}분")
 print(f"   - 중간 저장: 10개마다 자동 저장")
 print(f"   - 안전 종료: Ctrl+C로 중단 가능")
+print(f"   - 실패한 요청은 데이터셋에 추가되지 않음")
 print()
 print(f"시작: {START_INDEX}")
 print(f"종료: {START_INDEX + NEW_SAMPLES}")
@@ -711,6 +713,7 @@ try:
             print(f"  ✅ 성공: {result['word_count']}단어, {result['sentence_count']}문장")
             print(f"     \"{result['summary'][:80]}...\"")
 
+            # 성공한 경우만 데이터 추가
             new_data.append({
                 'index': i,
                 'article': paper['article'],
@@ -732,34 +735,20 @@ try:
         else:
             stats['failed'] += 1
             error_msg = result.get('error', 'Unknown')
-            print(f"  ❌ 실패: {error_msg}")
+            print(f"  ❌ 실패: {error_msg} (데이터셋에 추가 안 됨)")
             
             # 치명적 오류 체크
             if error_msg in ['Authentication failed', 'Quota exceeded', 'API key error']:
                 print(f"\n⛔ 치명적 오류 발생! 중단합니다.")
                 print(f"현재까지 진행 상황을 저장합니다...")
                 break
-
-            new_data.append({
-                'index': i,
-                'article': paper['article'],
-                'original_abstract': paper['abstract'],
-                'original_words': count_words(paper['abstract']),
-                'original_sentences': count_sentences(paper['abstract']),
-                'llm_summary': None,
-                'llm_words': 0,
-                'llm_sentences': 0,
-                'llm_mode': LLM_MODE,
-                'llm_name': LLM_NAMES[LLM_MODE],
-                'llm_model': current_config['model'],
-                'llm_success': False,
-                'error': error_msg,
-                'created_at': datetime.now().isoformat()
-            })
+            
+            # 실패한 경우 데이터에 추가하지 않음!
 
         stats['completed'] += 1
 
-        if stats['completed'] % 10 == 0:
+        # 중간 저장 (10개마다)
+        if stats['success'] > 0 and stats['success'] % 10 == 0:
             all_data = existing_data + new_data
             save_progress(all_data, len(all_data), START_INDEX + NEW_SAMPLES)
 
@@ -768,11 +757,13 @@ try:
             remaining = (NEW_SAMPLES - stats['completed']) / rate if rate > 0 else 0
 
             print(f"\n  📊 중간 통계:")
-            print(f"     성공률: {stats['success']}/{stats['completed']} ({stats['success']/stats['completed']*100:.1f}%)")
+            print(f"     처리: {stats['completed']}/{NEW_SAMPLES} ({stats['completed']/NEW_SAMPLES*100:.1f}%)")
+            print(f"     성공: {stats['success']}개 ({stats['success']/stats['completed']*100:.1f}%)")
+            print(f"     실패: {stats['failed']}개 (데이터셋에 미포함)")
             if stats['success'] > 0:
                 print(f"     평균: {stats['avg_words']/stats['success']:.1f}단어, {stats['avg_sentences']/stats['success']:.1f}문장")
             print(f"     속도: {rate:.2f}/분, 남은 시간: ~{remaining:.0f}분")
-            print(f"  💾 중간 저장 완료")
+            print(f"  💾 중간 저장 완료 ({len(all_data)}개)")
 
         if current < NEW_SAMPLES:
             print(f"  ⏳ {current_config['sleep']}초 대기...")
@@ -783,7 +774,7 @@ except KeyboardInterrupt:
     if new_data:
         all_data = existing_data + new_data
         save_progress(all_data, len(all_data), START_INDEX + NEW_SAMPLES)
-        print(f"✅ 진행 저장 완료! ({len(new_data)}개)")
+        print(f"✅ 진행 저장 완료! (성공한 {len(new_data)}개만 저장)")
     sys.exit(0)
 
 # ================================================================
@@ -804,9 +795,9 @@ print(f"\n📊 최종 통계:")
 print(f"{'='*60}")
 print(f"LLM: {LLM_NAMES[LLM_MODE]}")
 print(f"모델: {current_config['model']}")
-print(f"총 생성: {stats['completed']}개")
-print(f"성공: {stats['success']}개 ({stats['success']/stats['completed']*100:.1f}%)")
-print(f"실패: {stats['failed']}개")
+print(f"총 처리: {stats['completed']}개")
+print(f"성공: {stats['success']}개 ({stats['success']/stats['completed']*100:.1f}%) ✅ 데이터셋에 저장")
+print(f"실패: {stats['failed']}개 ({stats['failed']/stats['completed']*100:.1f}%) ❌ 데이터셋에서 제외")
 if stats['success'] > 0:
     print(f"평균: {stats['avg_words']/stats['success']:.1f}단어, {stats['avg_sentences']/stats['success']:.1f}문장")
 print(f"소요: {elapsed/60:.1f}분 ({stats['completed']/(elapsed/60):.1f}개/분)")
@@ -815,6 +806,7 @@ print(f"{'='*60}")
 print(f"\n📁 저장 위치:")
 print(f"  데이터: {data_path}")
 print(f"  진행: {progress_path}")
+print(f"  저장된 행 수: {len(all_data)}개 (성공한 것만)")
 
 if new_data:
     success_samples = [d for d in new_data if d['llm_success']]
@@ -868,10 +860,11 @@ remaining = max(0, 1000 - total_created)
 
 print(f"\n다음 단계:")
 print(f"1. 데이터 확인: {data_path}")
-print(f"2. 현재: {total_created}개")
+print(f"2. 현재: {total_created}개 (성공한 것만)")
 if remaining > 0:
     print(f"3. 1000개까지: {remaining}개 남음")
-    print(f"   → 약 {(remaining + NEW_SAMPLES - 1) // NEW_SAMPLES}번 더 실행 필요")
+    runs_remaining = (remaining + stats['success'] - 1) // stats['success'] if stats['success'] > 0 else 0
+    print(f"   → 현재 성공률 {stats['success']}/{stats['completed']}로 약 {runs_remaining}번 더 실행 필요")
 else:
     print(f"3. ✅ 1000개 달성!")
 
