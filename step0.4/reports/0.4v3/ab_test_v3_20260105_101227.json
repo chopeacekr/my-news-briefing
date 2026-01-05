@@ -1,0 +1,50 @@
+{
+  "metadata": {
+    "version": "V3",
+    "data_source": "/content/drive/MyDrive/SummaryDataSet/v3_merged_all_data.csv",
+    "finetuning": true,
+    "train_samples": 900,
+    "val_samples": 100,
+    "num_epochs": 5,
+    "temperature": 0.7,
+    "timestamp": "2026-01-05T10:12:27.472027"
+  },
+  "results": [
+    {
+      "test_id": 1,
+      "abstract": "gamma - ray spectra from cosmic - ray proton and electron interactions with dense gas clouds have been calculated using a monte carlo event simulation code , geant4 . such clouds are postulated as a possible form of baryonic dark matter in the universe . the simulation fully tracks the cascade and transport processes which are important in a dense medium , and the resulting gamma - ray spectra are computed as a function of cloud column - density . these calculations are used for predicting the galactic diffuse gamma - ray spectrum which may be contributed by baryonic dark matter ; the results are compared with data from the egret instrument , and used to constrain the fraction of galactic dark matter which may be in the form of dense gas clouds . in agreement with previous authors , we find useful constraints on the fraction of galactic dark matter which may be in the form of low column - density clouds ( ) . however , this fraction rises steeply in the region , and for we find that baryonic dark matter models are virtually unconstrained by the existing gamma - ray data .",
+      "abstract_length": 1088,
+      "llm_target": "GEANT4 Monte Carlo simulations modeled gamma-ray spectra from cosmic-ray interactions with dense gas clouds, posited as dark matter. Results constrain low column-density cloud fractions (<10^20 cm^-2) but find models with higher densities (>10^21 cm^-2) remain unconstrained by EGRET data.",
+      "base_summary": "The Monte Carlo simulations employing Geant4 predict gamma-ray spectra based on proton-electron interaction within dense gas-clouds, crucial for modeling Baryonic Dark Matter. These predictions contrast favorably with observed EGRET radiation patterns, offering new insights into Milky Way's hidden halo composition.",
+      "base_words": 40,
+      "base_copy_detected": false,
+      "ft_summary": "Monte Carlo simulations modeled cosmic-ray interactions within dense media—postulating them as BDM—to predict γ-ray spectra. Results constrained dark matter fractions up to ~10%, but were nearly unimodal at lower columns due to insufficient data validation.",
+      "ft_words": 35,
+      "ft_copy_detected": false
+    },
+    {
+      "test_id": 2,
+      "abstract": "we investigate a hamiltonian lattice version of the two - dimensional wess - zumino model by quantum monte carlo simulations . in order to study the pattern of supersymmetry breaking , we measure the ground state energy and the correlation length along a trajectory approaching the continuum limit . the algorithm is very effective in measuring the ground state energy , and adequate for the correlation length .",
+      "abstract_length": 412,
+      "llm_target": "Quantum Monte Carlo simulations investigated a Hamiltonian lattice Wess-Zumino model to study supersymmetry breaking. Ground state energy measurements proved effective, revealing a correlation length approaching the continuum limit and characterizing the breaking pattern.",
+      "base_summary": "The researchers explored the Hamiltonian lattice framework of the Wess-Zumino model using Quantum Monte Carlo methods. They focused on analyzing supersymmetric symmetry breakdown patterns through measurements of both the ground-state energy at low temperatures and the critical correlation lengths during scaling transitions towards thermodynamic equilibrium.",
+      "base_words": 45,
+      "base_copy_detected": false,
+      "ft_summary": "Quantum Monte Carlo simulations analyzed the Wess-Zumino model’s Hamiltonian on lattices via evaluating ground-state energies and correlation lengths. Results demonstrate efficient measurement methods enabling investigation into supersymmetrization breakdown patterns near the continuum limits.",
+      "ft_words": 33,
+      "ft_copy_detected": false
+    },
+    {
+      "test_id": 3,
+      "abstract": "we present high signal to noise ratio _ spitzer _ infrared spectrograph observations of 17 virgo early - type galaxies . the galaxies were selected from those that define the colour - magnitude relation of the cluster , with the aim of detecting the silicate emission of their dusty , mass - losing evolved stars . to flux calibrate these extended sources we have devised a new procedure that allows us to obtain the intrinsic spectral energy distribution and to disentangle resolved and unresolved emission within the same object . we have found that thirteen objects of the sample ( 76% ) are passively evolving galaxies with a pronounced broad silicate feature which is spatially extended and likely of stellar origin , in agreement with model predictions . the other 4 objects ( 24% ) are characterized by different levels of activity . in ngc 4486 ( m 87 ) the line emission and the broad silicate emission are evidently unresolved and , given also the typical shape of the continuum , they likely originate in the nuclear torus . ngc 4636 shows emission lines superimposed on extended ( i.e. stellar ) silicate emission , thus pushing the percentage of galaxies with silicate emission to 82% . finally , ngc 4550 and ngc 4435 are characterized by polycyclic aromatic hydrocarbon ( pah ) and line emission , arising from a central unresolved region . a more detailed analysis of our sample , with updated models , will be presented in a forthcoming paper . # 1 # 2 _ mem . soc . astron . it . _ * # 1 * , # 2 # 1 # 2 _ the messenger _ # 1 , # 2 # 1 # 2 astron . nach . # 1 , # 2 # 1 # 2 a&a # 1 , # 2 # 1 # 2 a&a # 1 , l#2 # 1 # 2 a&ar # 1 , # 2 # 1 # 2 a&as # 1 , # 2 # 1 # 2 aj # 1 , # 2 # 1 # 2 ara&a # 1,#2 # 1 # 2 apj # 1 , # 2 # 1 # 2 apj # 1 , l#2 # 1 # 2 apjs # 1 , # 2 # 1 # 2 ap&ss # 1 , # 2 # 1 # 2 adv . space res . # 1 , # 2 # 1 # 2 bull . astron . inst . czechosl . # 1 , # 2 # 1 # 2 j. quant . spectrosc . radiat . transfer # 1 , # 2 # 1 # 2 mnras # 1 , # 2 # 1 # 2 mem . r. astr . soc . # 1 , # 2 # 1 # 2 phys . lett . rev . # 1 , # 2 # 1 # 2 publ . astron . soc . japan # 1 , # 2 # 1 # 2 publ . astr . soc . pacific # 1 , # 2 # 1 # 2 nat # 1 , # 2 # 1 # 2 acta astron . # 1 , # 2",
+      "abstract_length": 2201,
+      "llm_target": "Spitzer observations of 17 Virgo galaxies detected broad silicate features in 76% of passively evolving objects, spatially extended and of stellar origin. Analysis revealed diverse activity in others, with emission arising from nuclear tori or central, unresolved regions containing PAHs.",
+      "base_summary": "ars/astronomy_astro/astrophysics 9 / 19 00 ; july 7 , 2013 ; astrophysics_&_astronomy 8 / 30 3 / 21 6 / 5 4 / 9 ; What was the primary goal of selecting Vir.",
+      "base_words": 33,
+      "base_copy_detected": false,
+      "ft_summary": "_ 1 _ + + 9 + + july 2007 * instrumentation for nearinfrared photometry : an example using nirc2 / ftesi detectors * _ first results at _ + dmi e-astro & dipartimento di fisica \" enrico fermi \"\" + c.so paula da vinci.",
+      "ft_words": 45,
+      "ft_copy_detected": false
+    }
+  ]
+}
