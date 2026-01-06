@@ -1,0 +1,42 @@
+{
+  "metadata": {
+    "mode": "전체 (Full)",
+    "model": {
+      "name": "ArXiv-NewsBrief-1.5B-1k-v4.0",
+      "mode": "전체 (Full)",
+      "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+      "data_size": "1000",
+      "style": "News Briefing"
+    },
+    "timestamp": "2026-01-06T04:37:02.486433"
+  },
+  "results": [
+    {
+      "test_id": 1,
+      "abstract": "development of exponentially scaling methods has seen great progress in tackling larger systems than previously thought possible. one such technique , full configuration interaction quantum monte carlo , is a useful algorithm that allows exact diagonalization through stochastically sampling determinants. the method derives its utility from the information in the matrix elements of the hamiltonian , along with a stochastic projected wave function , to find the important parts of hilbert space. however , the stochastic representation of the wave function is not required to search hilbert space efficiently , and here we describe a highly efficient deterministic method to achieve chemical accuracy for a wide range of systems , including the difficult cr dimer. we demonstrate that such calculations for systems like cr can be performed in just a few cpu hours. in addition. our method also allows efficient calculation of excited state energies , for which we illustrate with benchmark results for the excited states of c. _ introduction : _ the scope of traditional approaches to full configuration interaction ( fci ) has been limited to simple diatomic molecules. , and there has been little progress in diagonalizing spaces much larger than a billion determinants in recent times. however , recent progress in alternative approaches to fci problems has increased the scope of fci beyond simple diatomic molecules. two techniques in par",
+      "target": "Scientists have developed a new, faster way to solve complex quantum chemistry problems that were previously too difficult for computers. This improved method allows for accurate calculations on larger systems, like the chromium dimer, in a fraction of the time compared to older techniques, and can also efficiently calculate excited state energies.",
+      "base": "Exponential growth of computational complexity means only very large molecular systems have been feasible before. Researchers developed algorithms capable of handling bigger systems thanks to their ability to sample determinant combinations randomly rather than exhaustively calculate all possibilities.",
+      "base_words": 38,
+      "trained": "Scientists have developed faster computer algorithms—like Full Configuration Interaction Quantum Monte Carlo—to solve complex molecular problems that were too hard before.",
+      "trained_words": 21
+    },
+    {
+      "test_id": 2,
+      "abstract": "the ground state of the four - chain heisenberg ladder model is numerically investigated. hidden - order correlations suitable for the system are introduced and calculated with an emphasis on the spatially isotropic point , where a corresponding material exists. the existence of a long - range hidden correlation indicates formation of a short - range rvb state in the case of the antiferromagnetic inter - chain coupling. a transition between the phase of the ferromagnetic inter - chain coupling and that of the antiferromagnetic one is discussed. keywords : hidden correlation , ladder model , resonating valence bond , haldane phase",
+      "target": "This research explores a complex magnetic system (\"Heisenberg ladder\") to understand how its internal connections influence its behavior. The study found evidence of a unique, short-range magnetic state and how changing the connections between the \"chains\" within the system can cause a shift in its overall magnetic properties.",
+      "base": "The researchers looked at how atoms arrange themselves to form chains within materials called Heisenberg ladders. They found signs of special types of connections across different parts of these structures.",
+      "base_words": 30,
+      "trained": "This research studied how magnets arrange themselves in a specific structure using computer simulations to figure out what their stable arrangement looks like at different conditions.",
+      "trained_words": 26
+    },
+    {
+      "test_id": 3,
+      "abstract": "we have synthesized polycrystalline and single crystal samples of pbcuteo and studied its properties via magnetic susceptibility and heat - capacity measurements and also electronic structure calculations. whereas the crystal structure is suggestive of the presence of a quasi- network of cu buckled staircase kagome layers , the data show magnetic anisotropy and three magnetic anomalies at temperatures , k , k , k , respectively. the data follow the curie - weiss law above k and a curie - weiss temperature k is obtained. the data deviate from the simple curie - weiss law below k , which is well above , suggesting the presence of competing magnetic interactions. the magnetic anomaly at appears to be of first - order from magnetization measurements , although our heat - capacity results do not display any anomaly at the hopping integrals obtained from our electronic structure calculations suggest the presence of significant intra - kagome ( next - nearest neighbor and diagonal ) and inter - kagome couplings. these couplings take the pbcuteo system away from a disordered ground state and lead to long - range order , in contrast to what might be expected for an ideal ( isotropic ) kagome system .",
+      "target": "Scientists created and studied a material called PBCuTeO, finding it has complex magnetic behavior with several key changes happening at specific temperatures. This material’s structure and magnetic interactions are more complicated than expected for similar materials, leading to a stable, organized magnetic state instead of a disordered one.",
+      "base": "Scientists made special crystals called PBCUTEO with different shapes. They measured how they responded when exposed to magnets or heated up.",
+      "base_words": 21,
+      "trained": "Scientists made new materials called PBCUTEO and tested how their magnets interacted using various tests like measuring energy changes and spinning them.",
+      "trained_words": 22
+    }
+  ]
+}
