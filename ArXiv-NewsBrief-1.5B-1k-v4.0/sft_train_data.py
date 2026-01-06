@@ -1,19 +1,19 @@
 """
 =================================================================
-📰 ArXiv-NewsBrief-1.5B-1k-v4.0 - 뉴스 브리핑 스타일 모델 학습
+📰 ArXiv-NewsBrief-1.5B - 완전판 (연습 모드 포함)
 =================================================================
 
-🎯 모델명: ArXiv-NewsBrief-1.5B-1k-v4.0
+🎯 실행 모드:
+✅ MODE 0: 연습 모드 (50개 데이터, 빠른 검증) ⭐ NEW!
+✅ MODE 1: 전체 학습 모드 (1000개 데이터, 프로덕션)
+✅ MODE 2: 테스트 전용 (추론만)
 
-📊 V4 핵심:
-✅ 데이터: v4_training_data_all.csv (1000개)
-✅ 스타일: 일반인도 이해 가능한 뉴스 브리핑
-✅ 프롬프트: 단순하고 명확
-✅ 모델: Qwen2.5-1.5B-Instruct + LoRA
-
-🔄 버전 히스토리:
-- V3.0: ArXiv-Academic-1.5B-600-v3.0 (학술 스타일, 600개)
-- V4.0: ArXiv-NewsBrief-1.5B-1k-v4.0 (뉴스 스타일, 1000개) ⭐ NEW
+📊 연습 모드 특징:
+- 50개 데이터 (45 train + 5 val)
+- 3 에포크 (빠른 학습)
+- 5개 테스트 샘플
+- 상세한 진행 상황 출력
+- 팀원 교육용 최적화
 
 =================================================================
 """
@@ -21,837 +21,943 @@
 import subprocess
 import sys
 import os
-import json
-import re
-import time
-import random
-import torch
-import pandas as pd
-import numpy as np
 from pathlib import Path
-from datetime import datetime
 
 print("\n" + "="*70)
-print("🚀 ArXiv-NewsBrief-1.5B-1k-v4.0")
+print("🚀 ArXiv-NewsBrief - 완전판")
 print("="*70)
 
 # ================================================================
-# ⭐⭐⭐ V4.0 설정 ⭐⭐⭐
+# ⚙️ 실행 모드 설정 ⭐ 여기만 수정하세요!
 # ================================================================
+
+EXECUTION_MODE = 0  # ⭐ 여기를 바꾸세요!
+# 0: 연습 모드 (50개, 3 epochs) - 팀원 교육용
+# 1: 전체 모드 (1000개, 5 epochs) - 프로덕션
+# 2: 테스트 모드 (추론만)
+
+# ================================================================
+# 모드별 자동 설정
+# ================================================================
+
+if EXECUTION_MODE == 0:
+    # 연습 모드 ⭐
+    MODE_NAME = "연습 (Practice)"
+    DATA_FILE = "v4_training_data_all.csv"
+    MAX_DATA_TO_USE = 50  # 50개만
+    VAL_RATIO = 0.1  # 45 train + 5 val
+    NUM_EPOCHS = 3  # 빠른 학습
+    NUM_TEST_SAMPLES = 5  # 5개 테스트
+    ENABLE_FINETUNING = True
+    DETAILED_LOGGING = True  # 상세 로그
+    MODEL_SUFFIX = "practice-50"
+    
+elif EXECUTION_MODE == 1:
+    # 전체 모드
+    MODE_NAME = "전체 (Full)"
+    DATA_FILE = "v4_training_data_all.csv"
+    MAX_DATA_TO_USE = 1000
+    VAL_RATIO = 0.1  # 900 train + 100 val
+    NUM_EPOCHS = 5
+    NUM_TEST_SAMPLES = 3
+    ENABLE_FINETUNING = True
+    DETAILED_LOGGING = False
+    MODEL_SUFFIX = "1k-v4.0"
+    
+else:  # MODE == 2
+    # 테스트 모드
+    MODE_NAME = "테스트 (Test Only)"
+    DATA_FILE = "v4_training_data_all.csv"
+    MAX_DATA_TO_USE = 50
+    NUM_TEST_SAMPLES = 5
+    ENABLE_FINETUNING = False
+    DETAILED_LOGGING = True
+    MODEL_SUFFIX = "test"
+
+# 공통 설정
+DATA_DIR = "/content/drive/MyDrive/SummaryDataSet"
+USE_CHAT_TEMPLATE = True
+USE_SYSTEM_MESSAGE = True
+SYSTEM_MESSAGE = "Summarize the following text in simple, clear English that anyone can understand. Use no more than two complete sentences."
+TEMPERATURE = 0.7
+ENABLE_COPY_DETECTION = True
+COPY_DETECTION_THRESHOLD = 0.5
 
 # 모델 정보
 MODEL_VERSION = {
-    'name': 'ArXiv-NewsBrief-1.5B-1k-v4.0',
-    'major': 4,
-    'minor': 0,
-    'patch': 0,
+    'name': f'ArXiv-NewsBrief-1.5B-{MODEL_SUFFIX}',
+    'mode': MODE_NAME,
     'base_model': 'Qwen/Qwen2.5-1.5B-Instruct',
-    'base_size': '1.5B',
-    'data_size': '1k',
+    'data_size': f'{MAX_DATA_TO_USE if EXECUTION_MODE != 2 else "N/A"}',
     'style': 'News Briefing',
-    'target': 'General Audience'
 }
 
-print(f"\n📦 모델 정보:")
-print(f"   이름: {MODEL_VERSION['name']}")
-print(f"   버전: v{MODEL_VERSION['major']}.{MODEL_VERSION['minor']}.{MODEL_VERSION['patch']}")
-print(f"   베이스: {MODEL_VERSION['base_model']}")
-print(f"   데이터: {MODEL_VERSION['data_size']}")
-print(f"   스타일: {MODEL_VERSION['style']}")
-print(f"   타겟: {MODEL_VERSION['target']}")
-
-# 데이터 설정
-DATA_CONFIG = {
-    'source_file': 'v4_training_data_all.csv',
-    'max_samples': 1000,
-    'train_split': 0.9,
-    'val_split': 0.1
-}
-
-# 학습 설정
-TRAINING_CONFIG = {
-    'num_epochs': 5,
-    'learning_rate': 2e-4,
-    'batch_size': 1,
-    'gradient_accumulation_steps': 4,
-    'max_length': 512,
-    'warmup_steps': 10,
-    'fp16': True
-}
-
-# LoRA 설정
-LORA_CONFIG = {
-    'r': 16,
-    'alpha': 32,
-    'dropout': 0.1,
-    'target_modules': ["q_proj", "k_proj", "v_proj", "o_proj"]
-}
-
-# 생성 설정
-GENERATION_CONFIG = {
-    'temperature': 0.7,
-    'top_p': 0.9,
-    'max_new_tokens': 80,
-    'do_sample': True
-}
-
-print("\n⚙️ 학습 설정:")
-print(f"   에포크: {TRAINING_CONFIG['num_epochs']}")
-print(f"   학습률: {TRAINING_CONFIG['learning_rate']}")
-print(f"   LoRA r: {LORA_CONFIG['r']}")
-print(f"   LoRA alpha: {LORA_CONFIG['alpha']}")
-print("="*70)
+print(f"\n🎯 실행 모드: {MODE_NAME}")
+print(f"📦 모델: {MODEL_VERSION['name']}")
+if EXECUTION_MODE != 2:
+    print(f"📊 데이터: {MAX_DATA_TO_USE}개")
+    print(f"🔄 에포크: {NUM_EPOCHS}")
+print(f"🧪 테스트: {NUM_TEST_SAMPLES}개")
 
 # ================================================================
-# STEP 1: 패키지 설치
+# 후처리 함수
 # ================================================================
 
-print("\n" + "="*70)
-print("📦 STEP 1: 필수 패키지 설치")
-print("="*70)
+import re
 
-packages = [
-    "transformers",
-    "datasets", 
-    "accelerate",
-    "peft",
-    "bitsandbytes",
-    "trl",
-    "pandas",
-    "numpy",
-    "torch"
-]
-
-print("📥 패키지 설치 중...")
-for pkg in packages:
-    print(f"  - {pkg}")
-    subprocess.run(
-        [sys.executable, "-m", "pip", "install", "-q", "-U", pkg],
-        capture_output=True,
-        check=True
-    )
-
-print("✅ 모든 패키지 설치 완료!")
-
-# ================================================================
-# STEP 2: Import 및 기본 설정
-# ================================================================
-
-print("\n" + "="*70)
-print("📚 STEP 2: Import 및 초기 설정")
-print("="*70)
-
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    TrainingArguments,
-    Trainer,
-    DataCollatorForLanguageModeling
-)
-from peft import (
-    LoraConfig,
-    get_peft_model,
-    prepare_model_for_kbit_training
-)
-from datasets import Dataset
-from google.colab import drive
-
-print("✅ Import 완료")
-
-# Drive 마운트
-print("\n💾 Drive 마운트...")
-if not Path("/content/drive").exists():
-    drive.mount('/content/drive')
-print("✅ Drive 마운트 완료")
-
-# ================================================================
-# STEP 3: V4 데이터 로드 및 검증
-# ================================================================
-
-print("\n" + "="*70)
-print("📂 STEP 3: V4 데이터 로드 및 검증")
-print("="*70)
-
-# 데이터 경로
-DATA_DIR = "/content/drive/MyDrive/SummaryDataSet"
-DATA_FILE = DATA_CONFIG['source_file']
-data_path = Path(DATA_DIR) / DATA_FILE
-
-# 데이터 로드
-print(f"📥 데이터 로드 중...")
-print(f"   파일: {DATA_FILE}")
-
-if not data_path.exists():
-    raise FileNotFoundError(f"❌ 데이터 파일 없음: {data_path}")
-
-df = pd.read_csv(data_path)
-print(f"✅ 로드 완료: {len(df)}개 샘플")
-
-# V4 데이터 검증
-print("\n🔍 V4.0 데이터 검증...")
-
-# 필수 컬럼 확인
-required_columns = ['original_abstract', 'llm_summary', 'llm_success']
-missing_columns = [col for col in required_columns if col not in df.columns]
-
-if missing_columns:
-    raise ValueError(f"❌ 필수 컬럼 없음: {missing_columns}")
-
-print("✅ 필수 컬럼 확인 완료")
-
-# 성공한 데이터만 선택
-df_success = df[df['llm_success'] == True].copy()
-print(f"✅ 성공 데이터: {len(df_success)}개 (성공률: {len(df_success)/len(df)*100:.1f}%)")
-
-# V4 버전 확인 (있으면)
-if 'llm_version' in df_success.columns:
-    v4_count = (df_success['llm_version'] == 'V4').sum()
-    print(f"✅ V4 데이터: {v4_count}개")
-    if v4_count > 0:
-        df_success = df_success[df_success['llm_version'] == 'V4']
-        print(f"   V4만 필터링: {len(df_success)}개")
-
-# 테스트 데이터 제외 (있으면)
-if 'test_mode' in df_success.columns:
-    test_count = (df_success['test_mode'] == True).sum()
-    if test_count > 0:
-        df_success = df_success[df_success['test_mode'] == False]
-        print(f"✅ 테스트 데이터 제외: {test_count}개 제거")
-
-# 데이터 수 제한
-max_samples = DATA_CONFIG['max_samples']
-if len(df_success) > max_samples:
-    print(f"\n⚠️ 데이터 제한: {len(df_success)}개 → {max_samples}개")
-    df_success = df_success.head(max_samples)
-
-print(f"\n📊 최종 데이터: {len(df_success)}개")
-
-# 데이터 통계
-print("\n📈 V4.0 데이터 통계:")
-if 'llm_words' in df_success.columns:
-    print(f"   평균 단어 수: {df_success['llm_words'].mean():.1f}")
-    print(f"   범위: {df_success['llm_words'].min()}-{df_success['llm_words'].max()}")
-    print(f"   45단어 이하: {(df_success['llm_words'] <= 45).sum()}개 ({(df_success['llm_words'] <= 45).sum()/len(df_success)*100:.1f}%)")
-
-if 'llm_sentences' in df_success.columns:
-    print(f"   평균 문장 수: {df_success['llm_sentences'].mean():.1f}")
-    print(f"   2문장: {(df_success['llm_sentences'] == 2).sum()}개 ({(df_success['llm_sentences'] == 2).sum()/len(df_success)*100:.1f}%)")
-
-if 'llm_name' in df_success.columns:
-    print(f"\n   Teacher LLM 분포:")
-    for llm, count in df_success['llm_name'].value_counts().items():
-        print(f"     {llm}: {count}개")
-
-# ================================================================
-# STEP 4: Train/Val 분할
-# ================================================================
-
-print("\n" + "="*70)
-print("✂️ STEP 4: Train/Val 분할")
-print("="*70)
-
-# 인덱스 섞기 (재현성 위해 seed 고정)
-df_shuffled = df_success.sample(frac=1, random_state=42).reset_index(drop=True)
-
-# 분할
-train_split = DATA_CONFIG['train_split']
-train_size = int(len(df_shuffled) * train_split)
-train_df = df_shuffled[:train_size]
-val_df = df_shuffled[train_size:]
-
-print(f"📊 데이터 분할 ({int(train_split*100)}/{int((1-train_split)*100)}):")
-print(f"   Train: {len(train_df)}개 ({len(train_df)/len(df_shuffled)*100:.1f}%)")
-print(f"   Val: {len(val_df)}개 ({len(val_df)/len(df_shuffled)*100:.1f}%)")
-
-# Dataset 변환
-train_dataset = Dataset.from_pandas(
-    train_df[['original_abstract', 'llm_summary']].reset_index(drop=True)
-)
-val_dataset = Dataset.from_pandas(
-    val_df[['original_abstract', 'llm_summary']].reset_index(drop=True)
-)
-
-print("✅ Dataset 변환 완료")
-
-# 샘플 확인
-print("\n📝 V4.0 샘플 확인:")
-sample = train_dataset[0]
-print(f"\n입력 (초록): {sample['original_abstract'][:200]}...")
-print(f"\n출력 (V4 요약): {sample['llm_summary']}")
-
-# ================================================================
-# STEP 5: 모델 및 토크나이저 로드
-# ================================================================
-
-print("\n" + "="*70)
-print("🤖 STEP 5: 모델 및 토크나이저 로드")
-print("="*70)
-
-BASE_MODEL = MODEL_VERSION['base_model']
-print(f"📥 베이스 모델: {BASE_MODEL}")
-
-# QLoRA 설정 (4-bit 양자화)
-bnb_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_use_double_quant=True
-)
-
-# 모델 로드
-print("⏳ 모델 로딩 중...")
-model = AutoModelForCausalLM.from_pretrained(
-    BASE_MODEL,
-    quantization_config=bnb_config,
-    device_map="auto",
-    trust_remote_code=True
-)
-
-# 토크나이저 로드
-tokenizer = AutoTokenizer.from_pretrained(
-    BASE_MODEL,
-    trust_remote_code=True
-)
-
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
-
-tokenizer.padding_side = "right"
-
-print("✅ 모델 및 토크나이저 로드 완료")
-
-# LoRA 준비
-print("\n🔧 LoRA 설정 중...")
-model = prepare_model_for_kbit_training(model)
-
-lora_config = LoraConfig(
-    r=LORA_CONFIG['r'],
-    lora_alpha=LORA_CONFIG['alpha'],
-    target_modules=LORA_CONFIG['target_modules'],
-    lora_dropout=LORA_CONFIG['dropout'],
-    bias="none",
-    task_type="CAUSAL_LM"
-)
-
-model = get_peft_model(model, lora_config)
-
-print("📊 학습 가능한 파라미터:")
-model.print_trainable_parameters()
-
-# ================================================================
-# STEP 6: V4 프롬프트 적용
-# ================================================================
-
-print("\n" + "="*70)
-print("📝 STEP 6: V4.0 프롬프트 적용")
-print("="*70)
-
-# V4.0 System Message (뉴스 브리핑 스타일)
-SYSTEM_MESSAGE_V4 = "Summarize the following text in simple, clear English that anyone can understand. Use no more than two complete sentences."
-
-print("✨ V4.0 프롬프트:")
-print(f"   \"{SYSTEM_MESSAGE_V4}\"")
-print("\n특징:")
-print("   - 매우 단순하고 직접적")
-print("   - 일반인도 이해 가능")
-print("   - 뉴스 브리핑 스타일")
-print("   - V3 대비 90% 단순화")
-
-def formatting_prompts_v4(example):
-    """V4.0 프롬프트 포맷팅"""
+def detect_copy(text, original_article, ngram_size=5):
+    if not ENABLE_COPY_DETECTION:
+        return False
     
-    messages = [
-        {"role": "system", "content": SYSTEM_MESSAGE_V4},
-        {"role": "user", "content": example['original_abstract']},
-        {"role": "assistant", "content": example['llm_summary']}
+    text_clean = re.sub(r'[^\w\s]', '', text.lower())
+    article_clean = re.sub(r'[^\w\s]', '', original_article.lower())
+    
+    text_words = text_clean.split()
+    article_words = article_clean.split()
+    
+    if len(text_words) < ngram_size:
+        return False
+    
+    article_ngrams = set()
+    for i in range(len(article_words) - ngram_size + 1):
+        ngram = ' '.join(article_words[i:i+ngram_size])
+        article_ngrams.add(ngram)
+    
+    copy_count = 0
+    total_ngrams = 0
+    
+    for i in range(len(text_words) - ngram_size + 1):
+        ngram = ' '.join(text_words[i:i+ngram_size])
+        total_ngrams += 1
+        if ngram in article_ngrams:
+            copy_count += 1
+    
+    if total_ngrams == 0:
+        return False
+    
+    copy_ratio = copy_count / total_ngrams
+    return copy_ratio > COPY_DETECTION_THRESHOLD
+
+def clean_output(raw_text, original_article=""):
+    text = raw_text
+    
+    text = re.sub(r'\b(system|user|assistant)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\byou\s+are\s+(a|an)\b', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'research\s+paper|always\s+respond|maximum\s+45', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s+', ' ', text).strip()
+    
+    if "Summary:" in text:
+        text = text.split("Summary:")[-1].strip()
+    elif "Brief:" in text:
+        text = text.split("Brief:")[-1].strip()
+    elif "<|im_end|>" in text:
+        text = text.split("<|im_end|>")[-1].strip()
+    elif "<|im_start|>" in text:
+        if "assistant" in text:
+            text = text.split("assistant")[-1].strip()
+        else:
+            text = text.split("<|im_start|>")[-1].strip()
+    
+    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
+    
+    prompt_patterns = [
+        r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
+        r'<\|im_start\|>', r'<\|im_end\|>',
     ]
+    for pattern in prompt_patterns:
+        text = re.sub(pattern, '', text)
     
-    text = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=False
-    )
+    latex_patterns = [r'\$+', r'\\[a-zA-Z]+', r'@xmath\d+', r'@xcite']
+    for pattern in latex_patterns:
+        text = re.sub(pattern, '', text)
     
-    return {"text": text}
-
-def tokenize_function(example):
-    """토크나이즈"""
-    result = tokenizer(
-        example['text'],
-        truncation=True,
-        max_length=TRAINING_CONFIG['max_length'],
-        padding=False
-    )
-    result['labels'] = result['input_ids'].copy()
-    return result
-
-# 프롬프트 적용
-print("\n🔄 V4.0 프롬프트 적용 중...")
-train_dataset = train_dataset.map(formatting_prompts_v4)
-val_dataset = val_dataset.map(formatting_prompts_v4)
-
-print("🔄 토크나이즈 중...")
-train_dataset_tokenized = train_dataset.map(
-    tokenize_function,
-    remove_columns=train_dataset.column_names
-)
-val_dataset_tokenized = val_dataset.map(
-    tokenize_function,
-    remove_columns=val_dataset.column_names
-)
-
-print("✅ V4.0 프롬프트 적용 완료")
-
-# ================================================================
-# STEP 7: V4.0 학습 설정 및 실행
-# ================================================================
-
-print("\n" + "="*70)
-print("🏋️ STEP 7: V4.0 모델 학습")
-print("="*70)
-
-# 출력 디렉토리 (V4.0 네이밍)
-OUTPUT_DIR = f"/content/drive/MyDrive/ArXiv-Models/{MODEL_VERSION['name']}"
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-
-print(f"📁 출력 디렉토리: {OUTPUT_DIR}")
-
-# 학습 설정
-training_args = TrainingArguments(
-    output_dir=OUTPUT_DIR,
+    text = re.sub(r'```', '', text)
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\.\.+', '.', text)
+    text = text.strip()
     
-    # 에포크 및 배치
-    num_train_epochs=TRAINING_CONFIG['num_epochs'],
-    per_device_train_batch_size=TRAINING_CONFIG['batch_size'],
-    per_device_eval_batch_size=TRAINING_CONFIG['batch_size'],
-    gradient_accumulation_steps=TRAINING_CONFIG['gradient_accumulation_steps'],
-    eval_accumulation_steps=TRAINING_CONFIG['gradient_accumulation_steps'],
+    if not text or len(text) < 20:
+        return "[요약 생성 실패 - 출력 없음]"
     
-    # 옵티마이저
-    learning_rate=TRAINING_CONFIG['learning_rate'],
-    warmup_steps=TRAINING_CONFIG['warmup_steps'],
-    max_grad_norm=1.0,
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+    sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 5]
     
-    # 로깅 및 저장
-    logging_steps=10,
-    save_steps=50,
-    eval_strategy="steps",
-    eval_steps=50,
-    save_total_limit=3,
+    if not sentences:
+        return "[요약 생성 실패 - 유효 문장 없음]"
     
-    # 정밀도
-    fp16=TRAINING_CONFIG['fp16'],
+    cleaned_sentences = []
+    for s in sentences:
+        if not s[-1] in '.!?':
+            s += '.'
+        cleaned_sentences.append(s)
     
-    # 기타
-    report_to="none",
-    dataloader_num_workers=0,
-    remove_unused_columns=False
-)
-
-# Data Collator
-data_collator = DataCollatorForLanguageModeling(
-    tokenizer=tokenizer,
-    mlm=False,
-    pad_to_multiple_of=8,
-    return_tensors="pt"
-)
-
-# Trainer
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset_tokenized,
-    eval_dataset=val_dataset_tokenized,
-    data_collator=data_collator
-)
-
-# 학습 시작
-print("\n" + "="*70)
-print(f"🏋️ {MODEL_VERSION['name']} 학습 시작!")
-print("="*70)
-print(f"\n⚙️ 설정:")
-print(f"   모델: {MODEL_VERSION['name']}")
-print(f"   버전: v{MODEL_VERSION['major']}.{MODEL_VERSION['minor']}.{MODEL_VERSION['patch']}")
-print(f"   스타일: {MODEL_VERSION['style']}")
-print(f"   데이터: {len(train_dataset_tokenized)}개 (train)")
-print(f"   검증: {len(val_dataset_tokenized)}개 (val)")
-print(f"   에포크: {TRAINING_CONFIG['num_epochs']}")
-print(f"   배치 크기: {TRAINING_CONFIG['batch_size']}")
-print(f"   Gradient Accumulation: {TRAINING_CONFIG['gradient_accumulation_steps']}")
-print(f"   학습률: {TRAINING_CONFIG['learning_rate']}")
-print(f"\n⏱️ 예상 시간:")
-total_steps = len(train_dataset_tokenized) * TRAINING_CONFIG['num_epochs'] / (TRAINING_CONFIG['batch_size'] * TRAINING_CONFIG['gradient_accumulation_steps'])
-print(f"   총 스텝: ~{total_steps:.0f}")
-print(f"   예상 시간: ~{total_steps * 3 / 60:.0f}분 (T4 GPU)")
-print("="*70)
-
-start_time = time.time()
-trainer.train()
-elapsed_time = time.time() - start_time
-
-print("\n" + "="*70)
-print(f"✅ {MODEL_VERSION['name']} 학습 완료!")
-print("="*70)
-print(f"⏱️ 소요 시간: {elapsed_time/60:.1f}분")
-
-# 모델 저장
-print("\n💾 모델 저장 중...")
-final_model_path = Path(OUTPUT_DIR) / "final_model"
-trainer.model.save_pretrained(final_model_path)
-tokenizer.save_pretrained(final_model_path)
-print(f"✅ 모델 저장 완료: {final_model_path}")
-
-# ================================================================
-# STEP 8: V4.0 메타데이터 저장
-# ================================================================
-
-print("\n" + "="*70)
-print("📋 STEP 8: V4.0 메타데이터 저장")
-print("="*70)
-
-metadata = {
-    "model_info": MODEL_VERSION,
-    "dataset": {
-        "source": DATA_CONFIG['source_file'],
-        "total_size": len(df_success),
-        "train_size": len(train_df),
-        "val_size": len(val_df),
-        "train_split": DATA_CONFIG['train_split'],
-        "statistics": {
-            "avg_words": float(df_success['llm_words'].mean()) if 'llm_words' in df_success.columns else None,
-            "avg_sentences": float(df_success['llm_sentences'].mean()) if 'llm_sentences' in df_success.columns else None,
-            "teacher_llm": df_success['llm_name'].value_counts().to_dict() if 'llm_name' in df_success.columns else None
-        }
-    },
-    "training": {
-        "config": TRAINING_CONFIG,
-        "lora": LORA_CONFIG,
-        "generation": GENERATION_CONFIG,
-        "elapsed_time_minutes": round(elapsed_time / 60, 2),
-        "total_steps": int(total_steps)
-    },
-    "prompt": {
-        "system_message": SYSTEM_MESSAGE_V4,
-        "style": "Simple and direct",
-        "comparison_to_v3": "90% simpler than V3"
-    },
-    "changelog": [
-        "Initial V4.0 release with news briefing style",
-        "Simplified prompt from V3 (complex academic → simple news)",
-        "Enhanced hallucination prevention",
-        "Improved preprocessing for metadata filtering",
-        "Target audience: General public"
-    ],
-    "status": "experimental",
-    "created_at": datetime.now().isoformat(),
-    "next_version": "v4.1 (2k samples expansion planned)"
-}
-
-metadata_path = Path(OUTPUT_DIR) / "metadata.json"
-with open(metadata_path, 'w', encoding='utf-8') as f:
-    json.dump(metadata, f, indent=2, ensure_ascii=False)
-
-print(f"✅ 메타데이터 저장: {metadata_path}")
-
-# README 생성
-readme_content = f"""# {MODEL_VERSION['name']}
-
-## 📋 Model Information
-
-- **Version**: v{MODEL_VERSION['major']}.{MODEL_VERSION['minor']}.{MODEL_VERSION['patch']}
-- **Base Model**: {MODEL_VERSION['base_model']}
-- **Style**: {MODEL_VERSION['style']}
-- **Target Audience**: {MODEL_VERSION['target']}
-- **Data Size**: {MODEL_VERSION['data_size']} samples
-- **Status**: {metadata['status']}
-- **Created**: {datetime.now().strftime('%Y-%m-%d')}
-
-## 🎯 Purpose
-
-Generate news-style briefings of ArXiv papers that anyone can understand.
-
-## 📊 Training Data
-
-- **Source**: {DATA_CONFIG['source_file']}
-- **Train**: {len(train_df)} samples
-- **Validation**: {len(val_df)} samples
-- **Teacher LLM**: {list(df_success['llm_name'].unique()) if 'llm_name' in df_success.columns else 'Unknown'}
-
-## ⚙️ Training Configuration
-
-- **Epochs**: {TRAINING_CONFIG['num_epochs']}
-- **Learning Rate**: {TRAINING_CONFIG['learning_rate']}
-- **LoRA r**: {LORA_CONFIG['r']}
-- **LoRA alpha**: {LORA_CONFIG['alpha']}
-- **Training Time**: {elapsed_time/60:.1f} minutes
-
-## 📝 System Prompt
-```
-{SYSTEM_MESSAGE_V4}
-```
-
-## 🔄 Version History
-
-- **V3.0**: Academic style (600 samples)
-- **V4.0**: News briefing style (1000 samples) ⭐ Current
-
-## 🚀 Next Steps
-
-- Expand to 2k samples (v4.1)
-- Improve quality metrics
-- A/B testing with V3.0
-
-## 📁 Directory Structure
-```
-{MODEL_VERSION['name']}/
-├── final_model/       # Trained model weights
-├── checkpoint-*/      # Training checkpoints
-├── results/          # Evaluation results
-├── metadata.json     # Complete metadata
-└── README.md         # This file
-```
-
-## 📧 Contact
-
-For questions about this model, please refer to the training logs and metadata.
-"""
-
-readme_path = Path(OUTPUT_DIR) / "README.md"
-with open(readme_path, 'w', encoding='utf-8') as f:
-    f.write(readme_content)
-
-print(f"✅ README 생성: {readme_path}")
-
-# ================================================================
-# STEP 9: V4.0 모델 테스트 (A/B 비교)
-# ================================================================
-
-print("\n" + "="*70)
-print("🧪 STEP 9: V4.0 모델 테스트 (A/B 비교)")
-print("="*70)
-
-# 베이스 모델 로드 (비교용)
-print("\n📥 베이스 모델 로드 (비교용)...")
-base_model = AutoModelForCausalLM.from_pretrained(
-    BASE_MODEL,
-    quantization_config=bnb_config,
-    device_map="auto",
-    trust_remote_code=True
-)
-print("✅ 베이스 모델 로드 완료")
-
-# 테스트 샘플 선택
-print("\n📊 테스트 샘플 선택 (3개)...")
-test_samples = val_df.sample(n=min(3, len(val_df)), random_state=42)
-
-# 생성 설정
-generation_config = {
-    "max_new_tokens": GENERATION_CONFIG['max_new_tokens'],
-    "temperature": GENERATION_CONFIG['temperature'],
-    "top_p": GENERATION_CONFIG['top_p'],
-    "do_sample": GENERATION_CONFIG['do_sample'],
-    "pad_token_id": tokenizer.pad_token_id,
-    "eos_token_id": tokenizer.eos_token_id,
-}
-
-def generate_summary(model, abstract, is_finetuned=False):
-    """요약 생성"""
+    if len(cleaned_sentences) == 1:
+        words = cleaned_sentences[0].split()
+        if len(words) <= 45:
+            return cleaned_sentences[0]
+        else:
+            return ' '.join(words[:45]) + '.'
     
-    messages = [
-        {"role": "system", "content": SYSTEM_MESSAGE_V4},
-        {"role": "user", "content": abstract}
-    ]
+    sentence1 = cleaned_sentences[0]
+    sentence2 = cleaned_sentences[1]
     
-    prompt = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True
-    )
+    words1 = len(sentence1.split())
+    words2 = len(sentence2.split())
+    total = words1 + words2
     
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
-    inputs = {k: v.to(model.device) for k, v in inputs.items()}
-    
-    with torch.no_grad():
-        outputs = model.generate(**inputs, **generation_config)
-    
-    full_output = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # Assistant 응답만 추출
-    if "<|im_start|>assistant" in full_output:
-        summary = full_output.split("<|im_start|>assistant")[-1].strip()
-    elif "assistant" in full_output.lower():
-        summary = full_output.split("assistant")[-1].strip()
+    if total <= 45:
+        return f"{sentence1} {sentence2}"
+    elif words1 <= 45:
+        return sentence1
     else:
-        summary = full_output
-    
-    # 정리
-    summary = summary.replace("<|im_end|>", "").strip()
-    
-    return summary
+        words = sentence1.split()
+        return ' '.join(words[:45]) + '.'
 
-def clean_output(text, original_abstract):
-    """출력 정리"""
-    
-    # 프롬프트 누출 제거
-    patterns = [
-        r"Summarize.*?sentences?\.",
-        r"Use no more than.*?sentences?\.",
-        r"simple, clear English",
-        r"anyone can understand"
-    ]
-    
-    for pattern in patterns:
-        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
-    
-    # 초록 일부가 포함된 경우 제거
-    abstract_start = original_abstract[:50].lower()
-    if abstract_start in text.lower():
-        return "[ERROR: Contains original text]"
-    
-    # 짧은 답변 체크
-    if len(text.split()) < 10:
-        return "[ERROR: Too short]"
-    
-    # 메타 표현 제거
-    text = re.sub(r"Here('s| is) (the|a) summary:?", "", text, flags=re.IGNORECASE)
-    text = re.sub(r"^(The )?(summary|abstract):?", "", text, flags=re.IGNORECASE)
-    
-    return text.strip()
+print(f"\n✅ 후처리 함수 로드 완료")
 
-# A/B 테스트 실행
-print("\n" + "="*70)
-print("🔬 A/B 테스트 시작")
-print("="*70)
+# ================================================================
+# 전체 실행 (MODE 0, 1)
+# ================================================================
 
-ab_test_results = []
-
-for idx, (_, row) in enumerate(test_samples.iterrows(), 1):
-    print(f"\n{'='*70}")
-    print(f"테스트 {idx}/3")
-    print(f"{'='*70}")
+if EXECUTION_MODE in [0, 1]:
     
-    abstract = row['original_abstract']
-    target = row['llm_summary']
+    # ============================================================
+    # STEP 1: 패키지 설치
+    # ============================================================
     
-    print(f"\n📄 초록 (입력):")
-    print(f"{abstract[:300]}...")
+    print("\n" + "="*70)
+    print("📦 STEP 1: 패키지 설치")
+    print("="*70)
     
-    print(f"\n🎯 목표 (V4 Teacher):")
-    print(f"{target}")
+    if DETAILED_LOGGING:
+        print("\n💡 연습 모드: 패키지 설치 과정을 보여드립니다")
     
-    # 베이스 모델
-    print(f"\n⏳ 베이스 모델 생성 중...")
-    base_output = generate_summary(base_model, abstract, is_finetuned=False)
-    base_summary = clean_output(base_output, abstract)
+    os.environ['BNB_CUDA_VERSION'] = '121'
     
-    print(f"\n📝 베이스 모델 출력:")
-    print(f"{base_summary}")
+    print("\n🔧 bitsandbytes 설치...")
+    subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "bitsandbytes"], 
+                   capture_output=True, check=False)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "bitsandbytes>=0.43.0"],
+                   check=True)
     
-    # 파인튜닝 모델
-    print(f"\n⏳ V4.0 파인튜닝 모델 생성 중...")
-    ft_output = generate_summary(trainer.model, abstract, is_finetuned=True)
-    ft_summary = clean_output(ft_output, abstract)
+    print("📥 나머지 패키지...")
+    packages = ["transformers", "datasets", "accelerate", "peft", "pandas"]
+    for pkg in packages:
+        if DETAILED_LOGGING:
+            print(f"  - {pkg}")
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "-U", pkg],
+                      capture_output=True, check=True)
     
-    print(f"\n✨ V4.0 파인튜닝 출력:")
-    print(f"{ft_summary}")
+    print("✅ 패키지 설치 완료!")
     
-    # 결과 저장
-    result = {
-        "test_id": idx,
-        "abstract": abstract,
-        "abstract_length": len(abstract),
-        "target_v4": target,
-        "base_output": base_summary,
-        "base_words": len(base_summary.split()) if "[ERROR" not in base_summary else 0,
-        "ft_output_v4": ft_summary,
-        "ft_words": len(ft_summary.split()) if "[ERROR" not in ft_summary else 0,
+    # ============================================================
+    # STEP 2: Import
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("📚 STEP 2: 라이브러리 Import")
+    print("="*70)
+    
+    import torch
+    import gc
+    import json
+    import time
+    import pandas as pd
+    from datetime import datetime
+    from pathlib import Path
+    from datasets import Dataset
+    from transformers import (
+        AutoTokenizer, AutoModelForCausalLM, 
+        BitsAndBytesConfig, TrainingArguments, 
+        Trainer, DataCollatorForLanguageModeling
+    )
+    from peft import (
+        LoraConfig, get_peft_model, 
+        prepare_model_for_kbit_training, PeftModel
+    )
+    from google.colab import drive
+    
+    print("✅ Import 완료")
+    
+    # GPU 확인
+    print("\n🔍 GPU 환경 확인...")
+    if not torch.cuda.is_available():
+        raise RuntimeError("❌ GPU 없음!")
+    
+    gpu_name = torch.cuda.get_device_name(0)
+    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1e9
+    
+    print(f"✅ GPU: {gpu_name}")
+    print(f"✅ 메모리: {gpu_memory:.2f}GB")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 연습 모드: {gpu_name}는 충분합니다!")
+    
+    # bitsandbytes
+    import bitsandbytes as bnb
+    print(f"✅ bitsandbytes: {bnb.__version__}")
+    
+    # 메모리 정리
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    # Drive 마운트
+    print("\n💾 Google Drive 마운트...")
+    if not Path("/content/drive").exists():
+        drive.mount('/content/drive')
+    print("✅ 마운트 완료")
+    
+    # 출력 디렉토리
+    BASE_MODEL = MODEL_VERSION['base_model']
+    OUTPUT_DIR = f"/content/drive/MyDrive/ArXiv-Models/{MODEL_VERSION['name']}"
+    RESULTS_DIR = Path(OUTPUT_DIR) / "results"
+    
+    Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    
+    print(f"\n⚙️ 설정 요약:")
+    print(f"  모드: {MODE_NAME}")
+    print(f"  모델: {MODEL_VERSION['name']}")
+    print(f"  베이스: {BASE_MODEL}")
+    print(f"  데이터: {DATA_FILE}")
+    print(f"  샘플 수: {MAX_DATA_TO_USE}개")
+    print(f"  에포크: {NUM_EPOCHS}")
+    print(f"  저장 위치: {OUTPUT_DIR}")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 연습 모드 팁:")
+        print(f"  - 50개 데이터로 전체 파이프라인 경험")
+        print(f"  - 약 10-15분 소요 예상")
+        print(f"  - 실제 프로덕션과 동일한 구조")
+    
+    # ============================================================
+    # STEP 3: 데이터 로드
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("📂 STEP 3: 데이터 로드 및 준비")
+    print("="*70)
+    
+    data_path = Path(DATA_DIR) / DATA_FILE
+    
+    if not data_path.exists():
+        raise FileNotFoundError(f"❌ 데이터 없음: {data_path}")
+    
+    print(f"📥 데이터 로딩: {DATA_FILE}")
+    df = pd.read_csv(data_path)
+    print(f"✅ 전체 데이터: {len(df)}개")
+    
+    # 검증
+    required_columns = ['original_abstract', 'llm_summary', 'llm_success']
+    missing = [col for col in required_columns if col not in df.columns]
+    
+    if missing:
+        raise ValueError(f"❌ 필수 컬럼 없음: {missing}")
+    
+    # 필터링
+    df_success = df[df['llm_success'] == True].copy()
+    print(f"✅ 성공 데이터: {len(df_success)}개")
+    
+    if 'llm_version' in df_success.columns:
+        v4_count = (df_success['llm_version'] == 'V4').sum()
+        if v4_count > 0:
+            df_success = df_success[df_success['llm_version'] == 'V4']
+            print(f"✅ V4 필터: {len(df_success)}개")
+    
+    if 'test_mode' in df_success.columns:
+        df_success = df_success[df_success['test_mode'] == False]
+    
+    # 데이터 제한
+    if len(df_success) > MAX_DATA_TO_USE:
+        if DETAILED_LOGGING:
+            print(f"\n⚙️ 데이터 샘플링:")
+            print(f"  전체: {len(df_success)}개")
+            print(f"  사용: {MAX_DATA_TO_USE}개")
+        df_success = df_success.head(MAX_DATA_TO_USE)
+    
+    print(f"\n📊 최종 데이터: {len(df_success)}개")
+    
+    # Train/Val 분할
+    total = len(df_success)
+    val_samples = max(5, int(total * VAL_RATIO))
+    train_samples = total - val_samples
+    
+    print(f"\n📊 데이터 분할:")
+    print(f"  Train: {train_samples}개 ({train_samples/total*100:.1f}%)")
+    print(f"  Val: {val_samples}개 ({val_samples/total*100:.1f}%)")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 연습 모드:")
+        print(f"  - Train {train_samples}개로 모델 학습")
+        print(f"  - Val {val_samples}개로 성능 검증")
+        print(f"  - 실제 프로덕션과 동일한 비율")
+    
+    df_success = df_success.sample(frac=1, random_state=42).reset_index(drop=True)
+    train_df = df_success[:train_samples]
+    val_df = df_success[train_samples:train_samples + val_samples]
+    
+    # Dataset 생성
+    train_dataset = Dataset.from_pandas(
+        train_df[['original_abstract', 'llm_summary']].reset_index(drop=True)
+    )
+    val_dataset = Dataset.from_pandas(
+        val_df[['original_abstract', 'llm_summary']].reset_index(drop=True)
+    )
+    
+    # 통계
+    print(f"\n📊 데이터 통계:")
+    if 'llm_words' in train_df.columns:
+        avg_words = train_df['llm_words'].mean()
+        under_45 = (train_df['llm_words'] <= 45).sum()
+        print(f"  평균 단어: {avg_words:.1f}")
+        print(f"  45단어 이하: {under_45}/{len(train_df)} ({under_45/len(train_df)*100:.1f}%)")
+    
+    if 'llm_sentences' in train_df.columns:
+        avg_sent = train_df['llm_sentences'].mean()
+        two_sent = (train_df['llm_sentences'] == 2).sum()
+        print(f"  평균 문장: {avg_sent:.1f}")
+        print(f"  2문장: {two_sent}/{len(train_df)} ({two_sent/len(train_df)*100:.1f}%)")
+    
+    # 샘플 출력
+    print(f"\n📝 데이터 샘플 (1/{len(train_df)}):")
+    sample = train_df.iloc[0]
+    print("="*70)
+    print(f"📖 초록:")
+    print(f"{sample['original_abstract'][:200]}...")
+    print(f"\n✨ V4 요약:")
+    print(f"{sample['llm_summary']}")
+    if 'llm_words' in sample:
+        print(f"\n📊 {sample['llm_words']}단어, {sample.get('llm_sentences', '?')}문장")
+    print("="*70)
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 이해하기:")
+        print(f"  - 초록(abstract)을 입력으로")
+        print(f"  - V4 요약을 목표로 학습")
+        print(f"  - 2문장, 45단어 이하가 목표")
+    
+    # ============================================================
+    # STEP 4: 프롬프트 적용
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("📝 STEP 4: 프롬프트 생성")
+    print("="*70)
+    
+    tokenizer = AutoTokenizer.from_pretrained(BASE_MODEL, trust_remote_code=True)
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "right"
+    
+    print("✅ 토크나이저 로드")
+    
+    print(f"\n✨ 시스템 프롬프트:")
+    print(f'"{SYSTEM_MESSAGE}"')
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 프롬프트 역할:")
+        print(f"  - 모델에게 작업 지시")
+        print(f"  - 일반인도 이해 가능한 문장")
+        print(f"  - 2문장 제한 명시")
+    
+    def formatting_prompts_v4(example):
+        messages = []
+        
+        if USE_SYSTEM_MESSAGE:
+            messages.append({
+                "role": "system",
+                "content": SYSTEM_MESSAGE
+            })
+        
+        messages.append({
+            "role": "user",
+            "content": example['original_abstract']
+        })
+        
+        messages.append({
+            "role": "assistant",
+            "content": example['llm_summary']
+        })
+        
+        text = tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=False
+        )
+        
+        return {"text": text}
+    
+    print("\n🔄 프롬프트 적용 중...")
+    train_dataset = train_dataset.map(formatting_prompts_v4)
+    val_dataset = val_dataset.map(formatting_prompts_v4)
+    print("✅ 완료")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 다음 단계:")
+        print(f"  - 프롬프트를 토큰으로 변환")
+        print(f"  - 모델이 학습 가능한 형태로 변환")
+    
+    # ============================================================
+    # STEP 5: 토크나이즈
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("🔤 STEP 5: 토크나이즈 (텍스트→숫자)")
+    print("="*70)
+    
+    def tokenize_function(example):
+        result = tokenizer(
+            example['text'],
+            truncation=True,
+            max_length=512,
+            padding=False
+        )
+        result['labels'] = result['input_ids'].copy()
+        return result
+    
+    print("🔄 토크나이즈 중...")
+    train_dataset_tokenized = train_dataset.map(
+        tokenize_function,
+        remove_columns=train_dataset.column_names
+    )
+    val_dataset_tokenized = val_dataset.map(
+        tokenize_function,
+        remove_columns=val_dataset.column_names
+    )
+    print("✅ 완료")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 토크나이즈란?")
+        print(f"  - 텍스트를 숫자(토큰)로 변환")
+        print(f"  - 모델은 숫자로 학습합니다")
+        print(f"  - 예: 'Hello' → [123, 456]")
+    
+    # ============================================================
+    # STEP 6: 모델 로딩
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("🚀 STEP 6: 모델 로딩 (4-bit 양자화)")
+    print("="*70)
+    
+    print(f"📥 {BASE_MODEL} 로딩 중...")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 4-bit 양자화:")
+        print(f"  - 메모리 사용량 1/4로 감소")
+        print(f"  - T4 GPU(15GB)에서 실행 가능")
+        print(f"  - 성능은 거의 동일")
+        print(f"\n⏳ 로딩 중... (1-2분 소요)")
+    
+    model = AutoModelForCausalLM.from_pretrained(
+        BASE_MODEL,
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True
+        ),
+        device_map="auto",
+        trust_remote_code=True
+    )
+    print("✅ 모델 로드 완료")
+    
+    print("\n🔧 LoRA 어댑터 설정...")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 LoRA란?")
+        print(f"  - 전체 모델이 아닌 일부만 학습")
+        print(f"  - 메모리 효율적")
+        print(f"  - 빠른 학습 가능")
+    
+    model = prepare_model_for_kbit_training(model)
+    
+    lora_config = LoraConfig(
+        r=16,
+        lora_alpha=32,
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        lora_dropout=0.1,
+        bias="none",
+        task_type="CAUSAL_LM"
+    )
+    model = get_peft_model(model, lora_config)
+    
+    print("\n📊 학습 파라미터:")
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    total = sum(p.numel() for p in model.parameters())
+    print(f"  학습 가능: {trainable:,} ({100 * trainable / total:.2f}%)")
+    print(f"  전체: {total:,}")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 의미:")
+        print(f"  - 전체의 {100 * trainable / total:.1f}%만 학습")
+        print(f"  - 나머지는 고정 (효율적)")
+    
+    # ============================================================
+    # STEP 7: 학습
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print(f"🏋️ STEP 7: 모델 학습 ({NUM_EPOCHS} 에포크)")
+    print("="*70)
+    
+    training_args = TrainingArguments(
+        output_dir=OUTPUT_DIR,
+        num_train_epochs=NUM_EPOCHS,
+        per_device_train_batch_size=1,
+        per_device_eval_batch_size=1,
+        gradient_accumulation_steps=4,
+        eval_accumulation_steps=4,
+        learning_rate=2e-4,
+        logging_steps=5 if DETAILED_LOGGING else 10,
+        save_steps=25 if DETAILED_LOGGING else 50,
+        eval_strategy="steps",
+        eval_steps=25 if DETAILED_LOGGING else 50,
+        warmup_steps=5 if DETAILED_LOGGING else 10,
+        fp16=True,
+        report_to="none",
+        max_grad_norm=1.0,
+        dataloader_num_workers=0,
+        save_total_limit=2,
+    )
+    
+    trainer = Trainer(
+        model=model,
+        args=training_args,
+        train_dataset=train_dataset_tokenized,
+        eval_dataset=val_dataset_tokenized,
+        data_collator=DataCollatorForLanguageModeling(
+            tokenizer=tokenizer,
+            mlm=False,
+            pad_to_multiple_of=8,
+            return_tensors="pt"
+        )
+    )
+    
+    # 예상 시간 계산
+    steps_per_epoch = len(train_dataset_tokenized) // 4  # gradient_accumulation
+    total_steps = steps_per_epoch * NUM_EPOCHS
+    estimated_minutes = total_steps * 3 / 60  # 스텝당 ~3초
+    
+    print(f"\n📊 학습 정보:")
+    print(f"  모드: {MODE_NAME}")
+    print(f"  데이터: {train_samples}개")
+    print(f"  에포크: {NUM_EPOCHS}")
+    print(f"  총 스텝: ~{total_steps}")
+    print(f"  예상 시간: ~{estimated_minutes:.0f}분")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 학습 과정:")
+        print(f"  - 에포크: 전체 데이터를 한 번 보는 것")
+        print(f"  - {NUM_EPOCHS}번 반복 = 데이터를 {NUM_EPOCHS}번 봄")
+        print(f"  - 로그가 {5 if DETAILED_LOGGING else 10}스텝마다 출력")
+        print(f"\n⏳ 학습 시작... (진행 상황을 관찰하세요!)")
+    
+    print("="*70)
+    
+    start_time = time.time()
+    trainer.train()
+    elapsed_time = time.time() - start_time
+    
+    print("\n" + "="*70)
+    print(f"✅ 학습 완료!")
+    print("="*70)
+    print(f"⏱️ 소요 시간: {elapsed_time/60:.1f}분")
+    print(f"⚡ 평균 속도: {total_steps/(elapsed_time/60):.1f} 스텝/분")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 학습 결과:")
+        print(f"  - 모델이 {train_samples}개 예시 학습 완료")
+        print(f"  - 이제 새로운 초록도 요약 가능")
+        print(f"  - 다음: 모델 저장 및 테스트")
+    
+    # ============================================================
+    # STEP 8: 저장
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print("💾 STEP 8: 모델 저장")
+    print("="*70)
+    
+    final_model_path = Path(OUTPUT_DIR) / "final_model"
+    trainer.model.save_pretrained(final_model_path)
+    tokenizer.save_pretrained(final_model_path)
+    
+    print(f"✅ 모델 저장: {final_model_path}")
+    
+    # 메타데이터
+    metadata = {
+        "model_info": MODEL_VERSION,
+        "mode": MODE_NAME,
+        "dataset": {
+            "source": f"{DATA_DIR}/{DATA_FILE}",
+            "total_used": len(df_success),
+            "train_size": train_samples,
+            "val_size": val_samples,
+        },
+        "training": {
+            "num_epochs": NUM_EPOCHS,
+            "learning_rate": 2e-4,
+            "elapsed_time_minutes": round(elapsed_time / 60, 2),
+        },
+        "created_at": datetime.now().isoformat(),
     }
     
-    ab_test_results.append(result)
+    with open(final_model_path / "metadata.json", 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, indent=2, ensure_ascii=False)
+    
+    print(f"✅ 메타데이터 저장")
+    
+    # README
+    readme_content = f"""# {MODEL_VERSION['name']}
 
-# 결과 저장
-results_path = Path(OUTPUT_DIR) / "results"
-results_path.mkdir(exist_ok=True)
+## 🎯 모드: {MODE_NAME}
 
-ab_test_file = results_path / f"ab_test_{MODEL_VERSION['name']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+이 모델은 **{MODE_NAME}**으로 학습되었습니다.
 
-test_metadata = {
-    "metadata": {
-        "model": MODEL_VERSION,
-        "test_config": GENERATION_CONFIG,
-        "prompt": SYSTEM_MESSAGE_V4,
-        "timestamp": datetime.now().isoformat()
-    },
-    "results": ab_test_results
-}
+## 📊 학습 정보
 
-with open(ab_test_file, 'w', encoding='utf-8') as f:
-    json.dump(test_metadata, f, indent=2, ensure_ascii=False)
+- **데이터**: {train_samples} train + {val_samples} val
+- **에포크**: {NUM_EPOCHS}
+- **시간**: {elapsed_time/60:.1f}분
+- **날짜**: {datetime.now().strftime('%Y-%m-%d')}
 
-print(f"\n💾 A/B 테스트 결과 저장: {ab_test_file}")
+## 💡 목적
+
+{'팀원 교육 및 파이프라인 검증용' if EXECUTION_MODE == 0 else '프로덕션 품질 모델'}
+
+## 📝 시스템 프롬프트
+```
+{SYSTEM_MESSAGE}
+```
+
+## 🚀 사용 방법
+
+이 모델은 ArXiv 논문 초록을 일반인도 이해 가능한 2문장 요약으로 변환합니다.
+"""
+    
+    with open(final_model_path / "README.md", 'w', encoding='utf-8') as f:
+        f.write(readme_content)
+    
+    print(f"✅ README 저장")
+    
+    # 메모리 정리
+    del model, trainer
+    gc.collect()
+    torch.cuda.empty_cache()
+    
+    print("\n✅ STEP 1-8 완료!")
+    
+    # ============================================================
+    # STEP 9: A/B 테스트
+    # ============================================================
+    
+    print("\n" + "="*70)
+    print(f"🔬 STEP 9: A/B 테스트 ({NUM_TEST_SAMPLES}개 샘플)")
+    print("="*70)
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 A/B 테스트란?")
+        print(f"  - 베이스 모델 vs 학습된 모델 비교")
+        print(f"  - {NUM_TEST_SAMPLES}개 논문으로 테스트")
+        print(f"  - 품질 개선 확인")
+    
+    def make_prompt_v4(abstract):
+        messages = []
+        if USE_SYSTEM_MESSAGE:
+            messages.append({"role": "system", "content": SYSTEM_MESSAGE})
+        messages.append({"role": "user", "content": abstract})
+        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+    
+    # 모델 로딩
+    print("\n🤖 모델 로딩...")
+    
+    qwen_base = AutoModelForCausalLM.from_pretrained(
+        BASE_MODEL,
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16
+        ),
+        device_map="auto",
+        trust_remote_code=True
+    )
+    qwen_base.eval()
+    print("  ✅ 베이스 모델")
+    
+    qwen_ft = AutoModelForCausalLM.from_pretrained(
+        BASE_MODEL,
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.float16
+        ),
+        device_map="auto",
+        trust_remote_code=True
+    )
+    qwen_ft = PeftModel.from_pretrained(qwen_ft, final_model_path)
+    qwen_ft.eval()
+    print("  ✅ 학습된 모델")
+    
+    # 테스트 데이터
+    print(f"\n📥 테스트 데이터 선택...")
+    tests = []
+    for i in range(min(NUM_TEST_SAMPLES, len(val_df))):
+        paper = val_df.iloc[i]
+        tests.append({
+            "id": i + 1,
+            "abstract": paper['original_abstract'],
+            "llm_summary": paper['llm_summary']
+        })
+    print(f"  ✅ {len(tests)}개 선택")
+    
+    all_results = []
+    
+    print(f"\n🧪 테스트 실행 중...")
+    
+    for i, test in enumerate(tests):
+        if DETAILED_LOGGING:
+            print(f"\n{'='*70}")
+            print(f"테스트 {i+1}/{len(tests)}")
+            print(f"{'='*70}")
+        else:
+            print(f"  {i+1}/{len(tests)}...", end=" ")
+        
+        prompt = make_prompt_v4(test['abstract'])
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512).to(qwen_base.device)
+        
+        # 베이스
+        with torch.no_grad():
+            outputs = qwen_base.generate(
+                **inputs,
+                max_new_tokens=80,
+                min_length=30,
+                temperature=TEMPERATURE,
+                do_sample=True,
+                top_p=0.9,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3,
+                pad_token_id=tokenizer.pad_token_id
+            )
+        
+        generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+        base_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        base_summary = clean_output(base_raw, test['abstract'])
+        
+        # 학습된 모델
+        with torch.no_grad():
+            outputs = qwen_ft.generate(
+                **inputs,
+                max_new_tokens=80,
+                min_length=30,
+                temperature=TEMPERATURE,
+                do_sample=True,
+                top_p=0.9,
+                repetition_penalty=1.2,
+                no_repeat_ngram_size=3,
+                pad_token_id=tokenizer.pad_token_id
+            )
+        
+        generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+        ft_raw = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        ft_summary = clean_output(ft_raw, test['abstract'])
+        
+        all_results.append({
+            "test_id": test['id'],
+            "abstract": test['abstract'],
+            "target": test['llm_summary'],
+            "base": base_summary,
+            "base_words": len(base_summary.split()) if '[' not in base_summary else 0,
+            "trained": ft_summary,
+            "trained_words": len(ft_summary.split()) if '[' not in ft_summary else 0,
+        })
+        
+        if DETAILED_LOGGING:
+            print(f"\n📄 초록:")
+            print(f"{test['abstract'][:150]}...")
+            print(f"\n🎯 목표:")
+            print(f"{test['llm_summary']}")
+            print(f"\n📝 베이스:")
+            print(f"{base_summary}")
+            print(f"\n✨ 학습된 모델:")
+            print(f"{ft_summary}")
+        else:
+            print("✅")
+    
+    # 결과 저장
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_file = RESULTS_DIR / f"test_{MODE_NAME.replace(' ', '_')}_{timestamp}.json"
+    
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump({
+            "metadata": {
+                "mode": MODE_NAME,
+                "model": MODEL_VERSION,
+                "timestamp": datetime.now().isoformat()
+            },
+            "results": all_results
+        }, f, indent=2, ensure_ascii=False)
+    
+    print(f"\n💾 결과 저장: {json_file.name}")
+    
+    # 분석
+    print("\n" + "="*70)
+    print("📊 결과 분석")
+    print("="*70)
+    
+    base_valid = [r for r in all_results if '[' not in r['base']]
+    trained_valid = [r for r in all_results if '[' not in r['trained']]
+    
+    if base_valid:
+        avg_base = sum(r['base_words'] for r in base_valid) / len(base_valid)
+        print(f"\n베이스 모델: {avg_base:.1f}단어 ({len(base_valid)}/{len(all_results)} 성공)")
+    
+    if trained_valid:
+        avg_trained = sum(r['trained_words'] for r in trained_valid) / len(trained_valid)
+        print(f"학습된 모델: {avg_trained:.1f}단어 ({len(trained_valid)}/{len(all_results)} 성공)")
+    
+    if DETAILED_LOGGING:
+        print(f"\n💡 결과 해석:")
+        print(f"  - 성공률: 요약 생성 여부")
+        print(f"  - 단어 수: 45단어 이하가 목표")
+        print(f"  - 학습 효과 확인")
+    
+    # 샘플 출력
+    print(f"\n📋 샘플 비교 (1/{len(all_results)}):")
+    r = all_results[0]
+    print("="*70)
+    print(f"초록: {r['abstract'][:150]}...")
+    print(f"\n목표: {r['target']}")
+    print(f"\n베이스: {r['base']}")
+    print(f"학습: {r['trained']}")
+    print("="*70)
+    
+    print("\n" + "="*70)
+    print("✅ 전체 파이프라인 완료!")
+    print("="*70)
+    
+    print(f"\n📁 저장 위치:")
+    print(f"  모델: {final_model_path}")
+    print(f"  결과: {json_file}")
+    
+    if DETAILED_LOGGING:
+        print(f"\n🎓 학습 완료!")
+        print(f"  - 전체 파이프라인 경험 ✅")
+        print(f"  - 데이터 로드부터 테스트까지 ✅")
+        print(f"  - 다음: MODE=1로 전체 학습 시도")
+        print(f"\n💡 팀 공유:")
+        print(f"  - 결과 파일을 팀원들과 공유")
+        print(f"  - 각 단계별 로그 검토")
+        print(f"  - 질문사항 정리")
 
 # ================================================================
-# STEP 10: 최종 통계 및 요약
+# 테스트 전용 모드 (MODE 2)
 # ================================================================
 
+elif EXECUTION_MODE == 2:
+    print("\n⚠️ 테스트 전용 모드는 별도 구현 필요")
+    print("MODE=0 또는 MODE=1을 사용하세요")
+
 print("\n" + "="*70)
-print("📊 STEP 10: 최종 통계 및 요약")
+print("🎉 프로그램 종료")
 print("="*70)
-
-print(f"\n✨ {MODEL_VERSION['name']} 학습 완료!")
-print(f"\n📦 저장 위치:")
-print(f"   모델: {final_model_path}")
-print(f"   메타데이터: {metadata_path}")
-print(f"   README: {readme_path}")
-print(f"   결과: {ab_test_file}")
-
-print(f"\n📊 학습 통계:")
-print(f"   모델명: {MODEL_VERSION['name']}")
-print(f"   버전: v{MODEL_VERSION['major']}.{MODEL_VERSION['minor']}.{MODEL_VERSION['patch']}")
-print(f"   스타일: {MODEL_VERSION['style']}")
-print(f"   타겟: {MODEL_VERSION['target']}")
-print(f"   데이터: {DATA_CONFIG['source_file']}")
-print(f"   Train: {len(train_df)}개")
-print(f"   Val: {len(val_df)}개")
-print(f"   에포크: {TRAINING_CONFIG['num_epochs']}")
-print(f"   소요 시간: {elapsed_time/60:.1f}분")
-
-# A/B 테스트 간단 통계
-base_avg = np.mean([r['base_words'] for r in ab_test_results if r['base_words'] > 0])
-ft_avg = np.mean([r['ft_words'] for r in ab_test_results if r['ft_words'] > 0])
-
-print(f"\n🔬 A/B 테스트 통계:")
-print(f"   테스트: {len(ab_test_results)}개")
-print(f"   베이스 평균: {base_avg:.1f}단어")
-print(f"   V4.0 FT 평균: {ft_avg:.1f}단어")
-
-print(f"\n💡 다음 단계:")
-print(f"   1. A/B 테스트 결과 검토")
-print(f"   2. 일반인 이해도 평가")
-print(f"   3. V3.0 vs V4.0 비교 분석")
-print(f"   4. V4.1 (2k) 확장 계획")
-
-print(f"\n🔄 버전 로드맵:")
-print(f"   ✅ V3.0: ArXiv-Academic-1.5B-600-v3.0 (학술)")
-print(f"   ✅ V4.0: ArXiv-NewsBrief-1.5B-1k-v4.0 (뉴스) ⭐ 현재")
-print(f"   ⏳ V4.1: ArXiv-NewsBrief-1.5B-2k-v4.1 (계획)")
-print(f"   ⏳ V4.2: ArXiv-NewsBrief-1.5B-3k-v4.2 (계획)")
-print(f"   🎯 V4.3: ArXiv-NewsBrief-1.5B-5k-v4.3 (목표)")
-
-print("\n" + "="*70)
-print(f"🎉 {MODEL_VERSION['name']} 파이프라인 완료!")
-print("="*70)
-
-print(f"\n✨ V4.0 특징:")
-print(f"   - 일반인도 이해 가능")
-print(f"   - 뉴스 브리핑 스타일")
-print(f"   - 단순하고 명확한 언어")
-print(f"   - V3 대비 프롬프트 90% 단순화")
-print(f"   - 활용: 뉴스, 블로그, 대중 강연")
-
-print(f"\n📚 평가 프롬프트:")
-print(f"   V4.0 결과를 다른 LLM에 넣어 평가받으세요:")
-print(f"   파일: {ab_test_file}")
-
-print("\n" + "="*70)
