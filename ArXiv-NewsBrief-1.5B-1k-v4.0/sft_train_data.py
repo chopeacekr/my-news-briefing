@@ -1,17 +1,18 @@
 """
 =================================================================
-📰 ArXiv-NewsBrief-1.5B - 완전판 (CPU 지원) v2
+📰 ArXiv-NewsBrief-1.5B - 완전판 (안정화 버전) v3
 =================================================================
 
 🎯 실행 모드:
-✅ MODE 0: 연습 모드 (50개 데이터, 빠른 검증)
+✅ MODE 0: 연습 모드 (50개 데이터, 빠른 검증) - GPU 필요
 ✅ MODE 1: 전체 학습 모드 (1000개 데이터, 프로덕션) - GPU 필요
-✅ MODE 2: 테스트 전용 (추론만) - CPU 가능! ⭐
+✅ MODE 2: 테스트 전용 (추론만, 안정화됨) - CPU/GPU 가능! ⭐
 
-📊 CPU 지원:
-- MODE 2는 CPU에서도 실행 가능
-- 속도는 느리지만 작동함 (샘플당 ~30-60초)
-- 소량 테스트에 적합
+📊 V2.0 주요 개선사항 (MODE 2):
+✅ eos_token_id 추가 → 깔끔한 종료
+✅ 과도한 제약 제거 → 자연스러운 생성
+✅ 출력 추출 개선 → 특수 문자 제거
+✅ 간소화된 후처리 → 안정적인 요약
 
 =================================================================
 """
@@ -22,7 +23,7 @@ import os
 from pathlib import Path
 
 print("\n" + "="*70)
-print("🚀 ArXiv-NewsBrief - 완전판 (CPU 지원)")
+print("🚀 ArXiv-NewsBrief - 완전판 v2.0 (안정화)")
 print("="*70)
 
 # ================================================================
@@ -32,17 +33,17 @@ print("="*70)
 EXECUTION_MODE = 2  # ⭐ 여기를 바꾸세요!
 # 0: 연습 모드 (50개, 3 epochs) - GPU 필요
 # 1: 전체 모드 (1000개, 5 epochs) - GPU 필요
-# 2: 테스트 모드 (추론만) - CPU 가능!
+# 2: 테스트 모드 (추론만, 안정화됨) - CPU/GPU 가능!
 
 # ================================================================
 # MODE 2 전용 설정 ⭐
 # ================================================================
 
 # 추론할 샘플 개수 설정
-NUM_INFERENCE_SAMPLES = 100  # ⭐ CPU는 3-5개 추천 (많으면 오래 걸림)
+NUM_INFERENCE_SAMPLES = 5  # ⭐ GPU: 100개, CPU: 3-5개 추천
 
 # 사용할 모델 경로 (학습된 모델)
-INFERENCE_MODEL_NAME = "ArXiv-NewsBrief-1.5B-1k-v4.0"  # ⭐ 실제 모델 이름으로 변경
+INFERENCE_MODEL_NAME = "ArXiv-NewsBrief-1.5B-1k-v4.0"  # ⭐ 실제 모델 이름
 
 # CPU 추론 설정
 USE_CPU_FOR_INFERENCE = False  # ⭐ True면 GPU 없어도 실행됨
@@ -52,13 +53,13 @@ USE_CPU_FOR_INFERENCE = False  # ⭐ True면 GPU 없어도 실행됨
 # ================================================================
 
 if EXECUTION_MODE == 0:
-    # 연습 모드 ⭐
+    # 연습 모드
     MODE_NAME = "연습 (Practice)"
-    DATA_FILE = "v4.1_training_data_all.csv"
+    DATA_FILE = "v4_training_data_all.csv"
     MAX_DATA_TO_USE = 50
     VAL_RATIO = 0.1
     NUM_EPOCHS = 3
-    NUM_TEST_SAMPLES = 5
+    NUM_TEST_SAMPLES = 3
     ENABLE_FINETUNING = True
     DETAILED_LOGGING = True
     MODEL_SUFFIX = "practice-50"
@@ -78,15 +79,15 @@ elif EXECUTION_MODE == 1:
     REQUIRES_GPU = True
 
 else:  # MODE == 2
-    # 테스트 모드 ⭐
-    MODE_NAME = "추론 전용 (Inference Only)"
+    # 테스트 모드 (안정화됨!)
+    MODE_NAME = "추론 전용 (Inference Only - Stabilized)"
     DATA_FILE = "v4_training_data_all.csv"
     MAX_DATA_TO_USE = NUM_INFERENCE_SAMPLES
     NUM_TEST_SAMPLES = NUM_INFERENCE_SAMPLES
     ENABLE_FINETUNING = False
     DETAILED_LOGGING = True
     MODEL_SUFFIX = INFERENCE_MODEL_NAME
-    REQUIRES_GPU = not USE_CPU_FOR_INFERENCE  # CPU 모드면 GPU 불필요
+    REQUIRES_GPU = not USE_CPU_FOR_INFERENCE
 
 # 공통 설정
 DATA_DIR = "/content/drive/MyDrive/SummaryDataSet"
@@ -94,8 +95,6 @@ USE_CHAT_TEMPLATE = True
 USE_SYSTEM_MESSAGE = True
 SYSTEM_MESSAGE = "Summarize the following text in simple, clear English that anyone can understand. Use no more than two complete sentences."
 TEMPERATURE = 0.7
-ENABLE_COPY_DETECTION = True
-COPY_DETECTION_THRESHOLD = 0.5
 
 # 모델 정보
 if EXECUTION_MODE == 2:
@@ -105,7 +104,8 @@ if EXECUTION_MODE == 2:
         'base_model': 'Qwen/Qwen2.5-1.5B-Instruct',
         'inference_samples': NUM_INFERENCE_SAMPLES,
         'style': 'News Briefing',
-        'device': 'CPU' if USE_CPU_FOR_INFERENCE else 'GPU'
+        'device': 'CPU' if USE_CPU_FOR_INFERENCE else 'GPU',
+        'version': '2.0-stabilized'
     }
 else:
     MODEL_VERSION = {
@@ -121,135 +121,51 @@ print(f"📦 모델: {MODEL_VERSION['name']}")
 if EXECUTION_MODE == 2:
     print(f"💻 디바이스: {'CPU (느림)' if USE_CPU_FOR_INFERENCE else 'GPU (빠름)'}")
     print(f"🔬 추론 샘플: {NUM_INFERENCE_SAMPLES}개")
+    print(f"✨ 버전: v2.0 안정화")
 elif EXECUTION_MODE != 2:
     print(f"📊 데이터: {MAX_DATA_TO_USE}개")
     print(f"🔄 에포크: {NUM_EPOCHS}")
 print(f"🧪 테스트: {NUM_TEST_SAMPLES}개")
 
 # ================================================================
-# 후처리 함수
+# 간소화된 후처리 함수 (안정화 버전)
 # ================================================================
 
 import re
 
-def detect_copy(text, original_article, ngram_size=5):
-    if not ENABLE_COPY_DETECTION:
-        return False
-
-    text_clean = re.sub(r'[^\w\s]', '', text.lower())
-    article_clean = re.sub(r'[^\w\s]', '', original_article.lower())
-
-    text_words = text_clean.split()
-    article_words = article_clean.split()
-
-    if len(text_words) < ngram_size:
-        return False
-
-    article_ngrams = set()
-    for i in range(len(article_words) - ngram_size + 1):
-        ngram = ' '.join(article_words[i:i+ngram_size])
-        article_ngrams.add(ngram)
-
-    copy_count = 0
-    total_ngrams = 0
-
-    for i in range(len(text_words) - ngram_size + 1):
-        ngram = ' '.join(text_words[i:i+ngram_size])
-        total_ngrams += 1
-        if ngram in article_ngrams:
-            copy_count += 1
-
-    if total_ngrams == 0:
-        return False
-
-    copy_ratio = copy_count / total_ngrams
-    return copy_ratio > COPY_DETECTION_THRESHOLD
-
-def clean_output(raw_text, original_article=""):
-    text = raw_text
-
-    text = re.sub(r'\b(system|user|assistant)\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\byou\s+are\s+(a|an)\b', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'research\s+paper|always\s+respond|maximum\s+45', '', text, flags=re.IGNORECASE)
-    text = re.sub(r'\s+', ' ', text).strip()
-
-    if "Summary:" in text:
-        text = text.split("Summary:")[-1].strip()
-    elif "Brief:" in text:
-        text = text.split("Brief:")[-1].strip()
-    elif "<|im_end|>" in text:
-        text = text.split("<|im_end|>")[-1].strip()
-    elif "<|im_start|>" in text:
-        if "assistant" in text:
-            text = text.split("assistant")[-1].strip()
-        else:
-            text = text.split("<|im_start|>")[-1].strip()
-
-    text = re.sub(r'#{1,}|={3,}|-{3,}', '', text)
-
-    prompt_patterns = [
-        r'(?i)paper\s*:', r'(?i)summary\s*:', r'(?i)summarize',
-        r'<\|im_start\|>', r'<\|im_end\|>',
-    ]
-    for pattern in prompt_patterns:
-        text = re.sub(pattern, '', text)
-
-    latex_patterns = [r'\$+', r'\\[a-zA-Z]+', r'@xmath\d+', r'@xcite']
-    for pattern in latex_patterns:
-        text = re.sub(pattern, '', text)
-
-    text = re.sub(r'```', '', text)
+def clean_output_minimal(text):
+    """
+    최소한의 후처리만 수행 (안정화 버전)
+    - 특수 토큰 제거
+    - 공백 정리
+    - 기본 정리만
+    """
+    # 특수 토큰 제거
+    text = text.replace("<|im_start|>", "").replace("<|im_end|>", "")
+    text = text.replace("assistant", "", 1).strip()
+    
+    # 공백 정리
     text = re.sub(r'\s+', ' ', text)
-    text = re.sub(r'\.\.+', '.', text)
     text = text.strip()
+    
+    # 불필요한 접두사 제거 (최소한만)
+    if text.startswith("Summary:"):
+        text = text[8:].strip()
+    elif text.startswith("Brief:"):
+        text = text[6:].strip()
+    
+    return text
 
-    if not text or len(text) < 20:
-        return "[요약 생성 실패 - 출력 없음]"
-
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-    sentences = [s.strip() for s in sentences if s.strip() and len(s.split()) >= 5]
-
-    if not sentences:
-        return "[요약 생성 실패 - 유효 문장 없음]"
-
-    cleaned_sentences = []
-    for s in sentences:
-        if not s[-1] in '.!?':
-            s += '.'
-        cleaned_sentences.append(s)
-
-    if len(cleaned_sentences) == 1:
-        words = cleaned_sentences[0].split()
-        if len(words) <= 45:
-            return cleaned_sentences[0]
-        else:
-            return ' '.join(words[:45]) + '.'
-
-    sentence1 = cleaned_sentences[0]
-    sentence2 = cleaned_sentences[1]
-
-    words1 = len(sentence1.split())
-    words2 = len(sentence2.split())
-    total = words1 + words2
-
-    if total <= 45:
-        return f"{sentence1} {sentence2}"
-    elif words1 <= 45:
-        return sentence1
-    else:
-        words = sentence1.split()
-        return ' '.join(words[:45]) + '.'
-
-print(f"\n✅ 후처리 함수 로드 완료")
+print(f"\n✅ 후처리 함수 로드 완료 (v2.0 간소화)")
 
 # ================================================================
-# MODE 2: 추론 전용 모드 (CPU 지원!) ⭐
+# MODE 2: 추론 전용 모드 (안정화 버전!) ⭐
 # ================================================================
 
 if EXECUTION_MODE == 2:
 
     print("\n" + "="*70)
-    print("🔬 MODE 2: 추론 전용 모드 (CPU 지원)")
+    print("🔬 MODE 2: 추론 전용 모드 (v2.0 안정화)")
     print("="*70)
 
     if USE_CPU_FOR_INFERENCE:
@@ -260,7 +176,7 @@ if EXECUTION_MODE == 2:
         print(f"  - 현재 설정: {NUM_INFERENCE_SAMPLES}개 샘플")
 
     # ============================================================
-    # STEP 1: 패키지 설치 (CPU용 간소화)
+    # STEP 1: 패키지 설치
     # ============================================================
 
     print("\n" + "="*70)
@@ -268,7 +184,6 @@ if EXECUTION_MODE == 2:
     print("="*70)
 
     if not USE_CPU_FOR_INFERENCE:
-        # GPU 모드
         os.environ['BNB_CUDA_VERSION'] = '121'
         print("\n🔧 GPU 모드: bitsandbytes 설치...")
         subprocess.run([sys.executable, "-m", "pip", "uninstall", "-y", "bitsandbytes"],
@@ -308,7 +223,6 @@ if EXECUTION_MODE == 2:
     from peft import PeftModel
     from google.colab import drive
 
-    # CPU 모드에서는 BitsAndBytesConfig 불필요
     if not USE_CPU_FOR_INFERENCE:
         from transformers import BitsAndBytesConfig
 
@@ -342,11 +256,12 @@ if EXECUTION_MODE == 2:
     # 경로 설정
     BASE_MODEL = MODEL_VERSION['base_model']
     MODEL_PATH = f"/content/drive/MyDrive/ArXiv-Models/{INFERENCE_MODEL_NAME}/final_model"
-    RESULTS_DIR = Path(f"/content/drive/MyDrive/ArXiv-Models/{INFERENCE_MODEL_NAME}/inference_results")
+    RESULTS_DIR = Path(f"/content/drive/MyDrive/ArXiv-Models/{INFERENCE_MODEL_NAME}/inference_results_v2")
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"\n⚙️ 설정 확인:")
     print(f"  모드: {MODE_NAME}")
+    print(f"  버전: v2.0 안정화")
     print(f"  디바이스: {device.upper()}")
     print(f"  모델: {INFERENCE_MODEL_NAME}")
     print(f"  모델 경로: {MODEL_PATH}")
@@ -373,11 +288,9 @@ if EXECUTION_MODE == 2:
     df = pd.read_csv(data_path)
     print(f"✅ 전체 데이터: {len(df)}개")
 
-    # 필터링
     df_success = df[df['llm_success'] == True].copy()
     print(f"✅ 성공 데이터: {len(df_success)}개")
 
-    # 샘플 선택
     if len(df_success) > NUM_INFERENCE_SAMPLES:
         df_test = df_success.sample(n=NUM_INFERENCE_SAMPLES, random_state=42)
     else:
@@ -386,7 +299,7 @@ if EXECUTION_MODE == 2:
     print(f"\n📊 테스트 데이터: {len(df_test)}개")
 
     # ============================================================
-    # STEP 4: 모델 로딩 (CPU/GPU 자동 선택)
+    # STEP 4: 모델 로딩
     # ============================================================
 
     print("\n" + "="*70)
@@ -403,19 +316,17 @@ if EXECUTION_MODE == 2:
     print(f"\n📥 베이스 모델 로딩...")
 
     if USE_CPU_FOR_INFERENCE:
-        # CPU 모드 - 양자화 없이 로드
         print(f"💻 CPU 모드로 로딩 중... (2-3분 소요)")
         print(f"⚠️ 메모리 사용량: 약 6-8GB")
 
         model = AutoModelForCausalLM.from_pretrained(
             BASE_MODEL,
-            torch_dtype=torch.float32,  # CPU는 float32 사용
+            torch_dtype=torch.float32,
             device_map="cpu",
             trust_remote_code=True,
             low_cpu_mem_usage=True
         )
     else:
-        # GPU 모드 - 4bit 양자화
         print(f"🚀 GPU 모드로 로딩 중... (1-2분 소요)")
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -440,30 +351,50 @@ if EXECUTION_MODE == 2:
     print("\n💡 모델 준비 완료!")
 
     # ============================================================
-    # STEP 5: 추론 실행
+    # STEP 5: 추론 실행 (안정화 버전!) ⭐
     # ============================================================
 
     print("\n" + "="*70)
-    print(f"🔬 STEP 5: 추론 실행 ({NUM_INFERENCE_SAMPLES}개)")
+    print(f"🔬 STEP 5: 추론 실행 (v2.0 안정화)")
     print("="*70)
+
+    print(f"\n✨ v2.0 안정화 개선사항:")
+    print(f"  ✅ eos_token_id 추가 → 깔끔한 종료")
+    print(f"  ✅ repetition_penalty 제거 → 자연스러운 생성")
+    print(f"  ✅ no_repeat_ngram_size 제거 → 유연한 표현")
+    print(f"  ✅ min_length 제거 → 적절한 길이")
+    print(f"  ✅ 출력 추출 개선 → 특수 문자 제거")
 
     if USE_CPU_FOR_INFERENCE:
         print(f"\n⏰ CPU 모드 예상 시간:")
         print(f"  - 샘플당: 약 30-60초")
         print(f"  - 전체: 약 {NUM_INFERENCE_SAMPLES * 45 / 60:.1f}분")
-        print(f"  - 커피 한잔 하고 오세요! ☕")
 
     def make_prompt_v4(abstract):
+        """V4 프롬프트 생성"""
         messages = []
         if USE_SYSTEM_MESSAGE:
             messages.append({"role": "system", "content": SYSTEM_MESSAGE})
         messages.append({"role": "user", "content": abstract})
-        return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        return tokenizer.apply_chat_template(
+            messages, 
+            tokenize=False, 
+            add_generation_prompt=True
+        )
+
+    # ⭐ 안정화된 Generation Config
+    generation_config = {
+        "max_new_tokens": 80,
+        "temperature": TEMPERATURE,
+        "do_sample": True,
+        "top_p": 0.9,
+        "pad_token_id": tokenizer.pad_token_id,
+        "eos_token_id": tokenizer.eos_token_id,  # ⭐ 핵심 추가!
+    }
 
     all_results = []
 
     print(f"\n🧪 추론 시작...\n")
-
     overall_start = time.time()
 
     for i, (idx, row) in enumerate(df_test.iterrows()):
@@ -479,10 +410,10 @@ if EXECUTION_MODE == 2:
         print(f"\n📄 초록:")
         print(f"{abstract[:200]}...")
 
-        print(f"\n🎯 목표 요약 (V4.1):")
+        print(f"\n🎯 목표 요약:")
         print(f"{target}")
 
-        # 추론
+        # 프롬프트 생성
         prompt = make_prompt_v4(abstract)
         inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=512)
 
@@ -495,37 +426,52 @@ if EXECUTION_MODE == 2:
         print(f"\n⏳ 추론 중... ", end="")
         sample_start = time.time()
 
+        # ⭐ 안정화된 생성 (v2.0)
         with torch.no_grad():
-            outputs = model.generate(
-                **inputs,
-                max_new_tokens=80,
-                min_length=30,
-                temperature=TEMPERATURE,
-                do_sample=True,
-                top_p=0.9,
-                repetition_penalty=1.2,
-                no_repeat_ngram_size=3,
-                pad_token_id=tokenizer.pad_token_id
-            )
+            outputs = model.generate(**inputs, **generation_config)
 
         sample_time = time.time() - sample_start
         print(f"완료! ({sample_time:.1f}초)")
 
-        generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
-        raw_output = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-        summary = clean_output(raw_output, abstract)
+        # ⭐ 개선된 출력 추출 (v2.0)
+        full_output = tokenizer.decode(outputs[0], skip_special_tokens=False)
+        
+        if "<|im_start|>assistant" in full_output:
+            summary = full_output.split("<|im_start|>assistant")[-1]
+            if "<|im_end|>" in summary:
+                summary = summary.split("<|im_end|>")[0]
+            summary = summary.strip()
+        else:
+            generated_tokens = outputs[0][inputs['input_ids'].shape[1]:]
+            summary = tokenizer.decode(generated_tokens, skip_special_tokens=True)
+        
+        # 최소한의 후처리
+        summary = clean_output_minimal(summary)
 
-        print(f"\n✨ 생성된 요약:")
+        print(f"\n✨ 생성된 요약 (v2.0):")
         print(f"{summary}")
 
         # 분석
-        word_count = len(summary.split()) if '[' not in summary else 0
-        sentence_count = len(re.split(r'[.!?]+', summary.strip())) - 1 if '[' not in summary else 0
+        word_count = len(summary.split()) if summary and '[' not in summary else 0
+        sentence_count = len(re.split(r'[.!?]+', summary.strip())) - 1 if summary and '[' not in summary else 0
+
+        # 특수 문자 체크 (안정성 검증)
+        special_chars = {
+            "--": summary.count("--"),
+            "()": summary.count("()"),
+            '""': summary.count('""'),
+        }
+        has_special = any(count > 0 for count in special_chars.values())
 
         print(f"\n📊 분석:")
         print(f"  단어 수: {word_count}개 {'✅' if word_count <= 45 else '⚠️'}")
         print(f"  문장 수: {sentence_count}개 {'✅' if sentence_count == 2 else '⚠️'}")
         print(f"  소요 시간: {sample_time:.1f}초")
+        
+        if has_special:
+            print(f"  ⚠️ 특수 문자: {special_chars}")
+        else:
+            print(f"  ✅ 특수 문자 없음 (안정적)")
 
         # 진행 상황
         elapsed = time.time() - overall_start
@@ -546,6 +492,8 @@ if EXECUTION_MODE == 2:
             "sentence_count": sentence_count,
             "meets_word_limit": word_count <= 45 and word_count > 0,
             "meets_sentence_count": sentence_count == 2,
+            "has_special_chars": has_special,
+            "special_chars_detail": special_chars,
             "inference_time_seconds": round(sample_time, 2)
         })
 
@@ -554,14 +502,13 @@ if EXECUTION_MODE == 2:
     total_elapsed = time.time() - overall_start
 
     # ============================================================
-    # STEP 6: 결과 저장 및 분석
+    # STEP 6: 결과 저장 및 분석 (안정성 지표 포함)
     # ============================================================
 
     print("\n" + "="*70)
-    print("📊 STEP 6: 결과 분석 및 저장")
+    print("📊 STEP 6: 결과 분석 (v2.0 안정성 검증)")
     print("="*70)
 
-    # 통계 계산
     valid_results = [r for r in all_results if r['word_count'] > 0]
 
     if valid_results:
@@ -569,7 +516,10 @@ if EXECUTION_MODE == 2:
         word_compliant = sum(1 for r in valid_results if r['meets_word_limit'])
         sentence_compliant = sum(1 for r in all_results if r['meets_sentence_count'])
         avg_inference_time = sum(r['inference_time_seconds'] for r in all_results) / len(all_results)
-
+        
+        # ⭐ 특수 문자 통계 (안정성 지표)
+        special_char_issues = sum(1 for r in all_results if r['has_special_chars'])
+        
         print(f"\n📈 전체 통계:")
         print(f"  총 샘플: {len(all_results)}개")
         print(f"  성공: {len(valid_results)}개 ({len(valid_results)/len(all_results)*100:.1f}%)")
@@ -579,21 +529,39 @@ if EXECUTION_MODE == 2:
         print(f"  평균 추론 시간: {avg_inference_time:.1f}초/샘플")
         print(f"  총 소요 시간: {total_elapsed/60:.1f}분")
         print(f"  디바이스: {device.upper()}")
+        
+        print(f"\n🔍 v2.0 안정성 지표:")
+        print(f"  특수 문자 출현: {special_char_issues}/{len(all_results)} ({special_char_issues/len(all_results)*100:.1f}%)")
+        if special_char_issues == 0:
+            print(f"  ✅ 완벽한 안정성! 특수 문자 0개")
+        elif special_char_issues < len(all_results) * 0.1:
+            print(f"  ✅ 양호한 안정성 (10% 미만)")
+        else:
+            print(f"  ⚠️ 개선 여지 있음 (10% 이상)")
 
     # 결과 저장
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     device_suffix = "cpu" if USE_CPU_FOR_INFERENCE else "gpu"
-    json_file = RESULTS_DIR / f"inference_{NUM_INFERENCE_SAMPLES}samples_{device_suffix}_{timestamp}.json"
+    json_file = RESULTS_DIR / f"inference_v2_{NUM_INFERENCE_SAMPLES}samples_{device_suffix}_{timestamp}.json"
 
     result_data = {
         "metadata": {
             "mode": "inference_only",
+            "version": "2.0-stabilized",
             "device": device.upper(),
             "model_name": INFERENCE_MODEL_NAME,
             "num_samples": NUM_INFERENCE_SAMPLES,
             "timestamp": datetime.now().isoformat(),
             "elapsed_time_seconds": round(total_elapsed, 2),
             "avg_inference_time_seconds": round(avg_inference_time, 2) if valid_results else 0,
+            "improvements": [
+                "eos_token_id added",
+                "repetition_penalty removed",
+                "no_repeat_ngram_size removed",
+                "min_length removed",
+                "output extraction improved",
+                "minimal post-processing"
+            ]
         },
         "statistics": {
             "total_samples": len(all_results),
@@ -601,6 +569,8 @@ if EXECUTION_MODE == 2:
             "avg_word_count": round(avg_words, 2) if valid_results else 0,
             "word_compliant_rate": round(word_compliant/len(valid_results)*100, 2) if valid_results else 0,
             "sentence_compliant_rate": round(sentence_compliant/len(all_results)*100, 2),
+            "special_char_issues": special_char_issues,
+            "stability_rate": round((1 - special_char_issues/len(all_results))*100, 2)
         },
         "results": all_results
     }
@@ -610,17 +580,26 @@ if EXECUTION_MODE == 2:
 
     print(f"\n💾 결과 저장: {json_file.name}")
 
-    # 마크다운 리포트 생성
-    md_file = RESULTS_DIR / f"inference_report_{NUM_INFERENCE_SAMPLES}samples_{device_suffix}_{timestamp}.md"
+    # 마크다운 리포트
+    md_file = RESULTS_DIR / f"report_v2_{NUM_INFERENCE_SAMPLES}samples_{device_suffix}_{timestamp}.md"
 
-    md_content = f"""# 추론 결과 리포트 ({device.upper()})
+    md_content = f"""# 추론 결과 리포트 v2.0 (안정화) - {device.upper()}
 
 ## 📊 기본 정보
 - **모델**: {INFERENCE_MODEL_NAME}
+- **버전**: v2.0 안정화
 - **디바이스**: {device.upper()}
 - **샘플 수**: {NUM_INFERENCE_SAMPLES}개
 - **실행 시간**: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
 - **소요 시간**: {total_elapsed/60:.1f}분
+
+## ✨ v2.0 개선사항
+- ✅ eos_token_id 추가 → 깔끔한 종료
+- ✅ repetition_penalty 제거 → 자연스러운 생성
+- ✅ no_repeat_ngram_size 제거 → 유연한 표현
+- ✅ min_length 제거 → 적절한 길이
+- ✅ 출력 추출 개선 → 특수 문자 제거
+- ✅ 간소화된 후처리 → 안정성 향상
 
 ## 📈 성능 통계
 - **총 샘플**: {len(all_results)}개
@@ -630,11 +609,17 @@ if EXECUTION_MODE == 2:
 - **2문장 구조 준수율**: {sentence_compliant}/{len(all_results)} ({sentence_compliant/len(all_results)*100:.1f}%)
 - **평균 추론 시간**: {avg_inference_time:.1f}초/샘플
 
+## 🔍 안정성 지표
+- **특수 문자 출현**: {special_char_issues}/{len(all_results)} ({special_char_issues/len(all_results)*100:.1f}%)
+- **안정성 점수**: {(1 - special_char_issues/len(all_results))*100:.1f}%
+- **평가**: {'✅ 완벽' if special_char_issues == 0 else '✅ 양호' if special_char_issues < len(all_results)*0.1 else '⚠️ 개선 필요'}
+
 ## 📝 샘플 결과
 
 """
 
     for r in all_results[:min(3, len(all_results))]:
+        special_status = "⚠️ 특수 문자 있음" if r['has_special_chars'] else "✅ 안정적"
         md_content += f"""
 ### 샘플 {r['sample_id']}
 
@@ -644,13 +629,14 @@ if EXECUTION_MODE == 2:
 **목표 요약**:
 > {r['target_summary']}
 
-**생성된 요약**:
+**생성된 요약 (v2.0)**:
 > {r['generated_summary']}
 
 **분석**:
 - 단어 수: {r['word_count']}개 {'✅' if r['meets_word_limit'] else '⚠️'}
 - 문장 수: {r['sentence_count']}개 {'✅' if r['meets_sentence_count'] else '⚠️'}
 - 추론 시간: {r['inference_time_seconds']}초
+- 안정성: {special_status}
 
 ---
 """
@@ -661,27 +647,26 @@ if EXECUTION_MODE == 2:
     print(f"📄 리포트 저장: {md_file.name}")
 
     print("\n" + "="*70)
-    print("✅ 추론 완료!")
+    print("✅ v2.0 안정화 추론 완료!")
     print("="*70)
 
     print(f"\n📁 저장 위치:")
-    print(f"  결과: {json_file}")
+    print(f"  JSON: {json_file}")
     print(f"  리포트: {md_file}")
 
     print(f"\n💡 다음 단계:")
-    print(f"  - 결과 파일 확인 및 분석")
-    print(f"  - 샘플 개수 조정: NUM_INFERENCE_SAMPLES 변경")
-    if USE_CPU_FOR_INFERENCE:
-        print(f"  - GPU 사용 시 USE_CPU_FOR_INFERENCE = False로 변경")
-        print(f"  - CPU는 느리므로 5개 이하 추천")
+    print(f"  - 결과 파일 확인 (특수 문자 출현율 체크)")
+    print(f"  - v1.0 vs v2.0 비교 분석")
+    if special_char_issues == 0:
+        print(f"  ✅ 완벽한 안정성 달성! 프로덕션 배포 가능")
+    print(f"  - 샘플 수 확대 테스트 (100개 이상)")
 
 # ================================================================
-# 전체 실행 (MODE 0, 1) - GPU 필요
+# MODE 0, 1: 학습 모드 (기존 코드 유지)
 # ================================================================
 
 elif EXECUTION_MODE in [0, 1]:
 
-    # GPU 체크
     import torch
     if not torch.cuda.is_available():
         raise RuntimeError(f"""
@@ -691,12 +676,12 @@ MODE {EXECUTION_MODE} (학습 모드)는 GPU가 필요합니다.
 
 해결 방법:
 1. Colab에서: 런타임 → 런타임 유형 변경 → GPU 선택
-2. 추론만 하려면: MODE = 2로 변경 (CPU에서도 가능)
+2. 추론만 하려면: MODE = 2로 변경 (CPU/GPU 모두 가능)
 """)
 
-    # [나머지 MODE 0, 1 코드는 동일...]
-    print("\n⚠️ MODE 0, 1은 GPU가 필요합니다.")
-    print("이 코드는 CPU 추론 지원을 위해 MODE 2만 수정되었습니다.")
+    print("\n⚠️ MODE 0, 1은 학습 모드입니다.")
+    print("학습 코드는 기존 버전을 사용하세요.")
+    print("MODE 2만 v2.0으로 안정화되었습니다.")
 
 print("\n" + "="*70)
 print("🎉 프로그램 종료")
