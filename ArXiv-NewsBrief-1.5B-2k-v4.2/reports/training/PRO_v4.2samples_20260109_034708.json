@@ -1,0 +1,29 @@
+{
+  "metadata": {
+    "model_name": "ArXiv-NewsBrief-1.5B-1k-v4.2",
+    "mode": "전체 (Full)",
+    "base_model": "Qwen/Qwen2.5-1.5B-Instruct",
+    "num_test_samples": 3,
+    "timestamp": "2026-01-09T03:47:08.559396"
+  },
+  "results": [
+    {
+      "sample_id": 1,
+      "target": "This research experimentally studied how domain walls—boundaries between different states—move within a special optical device using lasers. The study revealed a connection between the shape of the laser light emitted and the speed & characteristics of these moving boundaries, allowing researchers to determine their fundamental rotational properties.",
+      "generated": "This research details how changes in light waves affect the movement and characteristics of tiny structures called domain walls within a specific optical setup. By studying this relationship, scientists were able to measure the direction (chirality) of these movements using visible light signals.",
+      "abstract": "we report the experimental characterization of domain walls dynamics in a photorefractive resonator in a degenerate four wave mixing configuration. we show how the non flat profile of the emitted field affects the velocity of domain walls as well as the variations of intensity and phase gradient during their motion. we find a clear correlation between these two last quantities that allows the experimental determination of the chirality that governs the domain walls dynamics ."
+    },
+    {
+      "sample_id": 2,
+      "target": "This research explores how to accurately describe the interactions of mesons using mathematical tools called form factors and non-local Lagrangians. Specifically, it details two approaches to building these Lagrangians, one simpler but less precise, and another more complex but mathematically sound, with an example application to understanding the behavior of kaons.",
+      "generated": "This research explores how particles called mesons interact with each other using mathematical tools called form factors. The study presents two different ways to model these interactions and demonstrates their usefulness in calculations involving mesons and their associated particles.",
+      "abstract": "mesons are extended objects , hence their interaction can be described by utilizing form factors. at the lagrangian level. , one can use nonlocal interaction terms. here. we describe two possible nonlocal lagrangians leading to a 3d form factor : the first one is simple but does not fulfill covariance ( if one insists on a 3d cutoff ) , the second extension is more involved but guarantees covariance. such form factors are useful when calculating mesonic loops. as an important example. , we discuss the scalar kaonic sector ,. the lagrangian contains a single scalar kaon ( the well - establish state ) , but through loops emerges as a dynamically generated companion pole ( which disappears in the large- limit ) ."
+    },
+    {
+      "sample_id": 3,
+      "target": "This research explores a potential explanation for why there is more matter than antimatter in the universe, focusing on a process called electroweak baryogenesis. The study uses a specific theoretical framework—the minimal supersymmetric extension of the standard model—and refines existing calculations to better understand how this process might have occurred.",
+      "generated": "This research explores how the universe initially created matter by studying a specific theoretical process called “electroweak baryogenesis.” Researchers analyze existing theories to clarify their predictions and align them with experimental possibilities, focusing on scenarios involving supersymmetry and a precise Higgs particle mass.",
+      "abstract": "electroweak baryogenesis provides a very attractive scenario to explain the origin of the baryon asymmetry. the mechanism of electroweak baryogenesis makes use of the baryon number anomaly and relies on physics that can be tested experimentally. it is today understood that , if the higgs mass is not larger than 120 gev , this mechanism may be effective within supersymmetric extensions of the standard model. in this work ,. we reconsider the question of baryon number generation at the electroweak phase transition within the context of the minimal supersymmetric extension of the standard model. we derive the relevant diffusion equations , give a consistent definition of the sources , and compare our results with those appearing in the recent literature on this subject ."
+    }
+  ]
+}

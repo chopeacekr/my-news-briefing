@@ -1,0 +1,1 @@
+USER_PROMPT_V4 = """Summarize the following text in simple, clear English that anyone can understand. Make it as for the each script not for reading. Use no more than two complete sentences. Do not include my prompt message in result. Make sure to keep in professional tone."
