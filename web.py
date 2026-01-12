@@ -1,10 +1,19 @@
 """
-ArXiv-NewsBrief v0.1 Summarization Chatbot (GGUF)
+ArXiv-NewsBrief v0.2 Summarization Chatbot (GGUF)
 - Model: Qwen2.5-1.5B-Instruct fine-tuned -> GGUF (Q4_K_M)
 - Inference: llama-cpp-python
 - TTS: Google gTTS
 - STT: Google Speech Recognition
 - Translation (Korean UI): Google Gemini 2.5 Flash
+
+✅ Update:
+- 📰 Make News Brief 버튼은 언어/상태와 무관하게 항상 클릭 가능
+- 버튼 클릭 시:
+  - 최신 논문이 없으면 자동 Fetch
+  - 3개 논문 abstract를 summarize_with_gguf로 3번 요약
+  - 오프닝/클로징 포함 템플릿 스크립트 생성
+  - ✅ 선택 언어가 Korean일 때만 영→한 번역(Gemini)
+  - chat에 스크립트 추가 + (옵션) TTS autoplay
 """
 
 import base64
@@ -134,8 +143,6 @@ def fetch_recent_arxiv_candidates(
                 published_dt = None
 
         if published_dt and published_dt < cutoff:
-            # 최신순이므로 cutoff 아래면 이후도 모두 오래됐을 확률 높음
-            # 하지만 arXiv는 버전/지연이 있어서 break 대신 continue도 가능
             continue
 
         arxiv_id = _parse_arxiv_id(getattr(e, "id", ""))
@@ -165,40 +172,7 @@ def fetch_citations_semantic_scholar(
     if not arxiv_ids:
         return {}
 
-    # Semantic Scholar paperId 형식: "arXiv:XXXX.XXXXXvN" 도 가능
-    paper_ids = [f"arXiv:{x}" for x in arxiv_ids if x]
-
-    payload = {
-        "ids": paper_ids
-    }
-    params = {
-        "fields": "citationCount"
-    }
-
-    if sleep_sec > 0:
-        time.sleep(sleep_sec)
-
-    r = requests.post(SEMANTIC_SCHOLAR_BATCH, params=params, json=payload, timeout=timeout_sec)
-    if r.status_code != 200:
-        return {}
-
-    data = r.json()
-    # data: [{paperId, citationCount, ...}, ...] 형태
-    out = {}
-    for item in data:
-        if not item:
-            continue
-        pid = item.get("paperId")  # sometimes returns None in errors
-        c = item.get("citationCount")
-        # 우리가 넣은 id는 arXiv:... 이므로, 안전하게 역매핑:
-        # item에 "paperId" 대신 "externalIds"가 오는 경우도 있는데 batch에서는 보통 citationCount만 포함
-        # 따라서 order 기반으로 매핑이 안정적이지 않을 수 있어, 여기선 단순히 "arXiv:xxx" 그대로 키로 찾기 어렵습니다.
-        # => 해결: response item에 "paperId"가 없으면 스킵. (무키 호출의 한계)
-        # 실전에서는 아래처럼 별도 조회(단건)로 externalIds를 받아 매핑하는 게 가장 정확합니다.
-        pass
-
-    # ⚠️ 위 매핑 이슈 때문에: 더 안정적인 단건 조회 방식(느리지만 확실)
-    # - 후보가 30~50개 수준이면 충분히 가능
+    # ⚠️ 단건 조회 방식(느리지만 확실)
     out = {}
     for aid in arxiv_ids:
         if not aid:
@@ -231,12 +205,6 @@ def get_top_recent_papers_pipe_string(
     """
     최근 {days}일 arXiv 후보 → (가능하면) citationCount로 정렬 → top_k 반환.
     - return: (pipe_joined_string, selected_items)
-
-    pipe_joined_string 포맷(예시):
-      [1] Title (arXiv:xxxx.xxxxx)
-      Abstract...
-      | 
-      [2] ...
     """
     candidates = fetch_recent_arxiv_candidates(
         days=days,
@@ -247,29 +215,23 @@ def get_top_recent_papers_pipe_string(
     if not candidates:
         return ("", [])
 
-    # citations 조회 시도
     citations = {}
     if prefer_citations:
         arxiv_ids = [c["arxiv_id"] for c in candidates if c.get("arxiv_id")]
-        # 너무 많이 호출하면 느려서 상위 일부만 조회 추천
         arxiv_ids = arxiv_ids[: min(len(arxiv_ids), 30)]
         citations = fetch_citations_semantic_scholar(arxiv_ids, sleep_sec=0.2)
 
-    # 후보에 citationCount 붙이기
     for c in candidates:
         aid = c.get("arxiv_id")
         c["citationCount"] = int(citations.get(aid, 0)) if citations else 0
 
-    # 정렬: citationCount 우선(동률이면 최신)
     def _sort_key(x):
         pub = x.get("published") or ""
-        # published가 None이면 뒤로
         return (x.get("citationCount", 0), pub)
 
     if prefer_citations and citations:
         ranked = sorted(candidates, key=_sort_key, reverse=True)
     else:
-        # fallback: 최신순(원래 최신순이지만 안전하게 published 기준)
         ranked = sorted(candidates, key=lambda x: x.get("published") or "", reverse=True)
 
     selected = ranked[:top_k]
@@ -280,8 +242,6 @@ def get_top_recent_papers_pipe_string(
         abstract = p.get("abstract", "").strip()
         aid = p.get("arxiv_id", "").strip()
         ccount = p.get("citationCount", 0)
-        # 너무 길면 안전하게 조금 자르기(선택)
-        # abstract = abstract[:1500]
 
         header = f"[{i}] {title} (arXiv:{aid})"
         if prefer_citations:
@@ -307,9 +267,15 @@ if "llm" not in st.session_state:
 if "model_loaded" not in st.session_state:
     st.session_state.model_loaded = False
 
-# ✅ (추가) autoplay 1회 실행을 위한 상태
+# ✅ autoplay 1회 실행을 위한 상태
 if "autoplay_audio_html" not in st.session_state:
     st.session_state.autoplay_audio_html = None
+
+# ✅ 최신 논문 상태
+if "latest_papers_blob" not in st.session_state:
+    st.session_state.latest_papers_blob = ""
+if "latest_papers_items" not in st.session_state:
+    st.session_state.latest_papers_items = []
 
 
 # ================================
@@ -344,10 +310,6 @@ def load_gguf_model(model_path: str, n_ctx: int, n_threads: int, n_batch: int):
 # ChatML 프롬프트 빌더 (Teacher messages 구조 재현)
 # ================================
 def build_chatml_prompt(messages: list[dict]) -> str:
-    """
-    Teacher 학습 때의 messages=[{role,content}, ...]를
-    llama.cpp/gguf에 넣을 ChatML 문자열로 변환
-    """
     out = []
     for m in messages:
         role = (m.get("role") or "").strip()
@@ -358,7 +320,7 @@ def build_chatml_prompt(messages: list[dict]) -> str:
 
 
 # ================================
-# 요약 함수 (GGUF) - Teacher 방식 messages 적용
+# 요약 함수 (GGUF)
 # ================================
 def summarize_with_gguf(
     text: str,
@@ -398,14 +360,14 @@ def summarize_with_gguf(
 
 
 # ================================
-# 번역 함수 (Gemini) - Korean 선택 시 사용
+# 번역 함수 (Gemini)
 # ================================
 def translate_with_gemini(
     text: str,
     api_key: str,
     target_lang: str = "Korean",
-    max_tokens: int = 3072,          # ✅ 늘림 (1024 → 3072)
-    max_retries: int = 2,            # ✅ 끊김 시 추가 이어쓰기 호출 횟수
+    max_tokens: int = 3072,
+    max_retries: int = 2,
 ) -> str:
     """
     Gemini로 번역 (짤림 방지: 끊김 감지 + 이어쓰기)
@@ -414,7 +376,7 @@ def translate_with_gemini(
         llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             temperature=0.4,
-            max_tokens=max_tokens,   # ✅ 토큰 한도 확대
+            max_tokens=max_tokens,
             google_api_key=api_key,
         )
 
@@ -429,28 +391,18 @@ Text:
 {text}
 """
 
-        debug_log("Translation input (original summary)", {
-            "len_chars": len(text),
-            "head": text[:600],
-            "tail": text[-200:] if len(text) > 200 else text
-        })
-        debug_log("Translation prompt (preview)", base_prompt[:1200])
-
         response = llm.invoke(base_prompt)
         translated = (response.content or "").strip()
 
         def looks_truncated(s: str) -> bool:
             if not s:
                 return True
-            # 문장 종료부호 없이 끝나면 끊겼을 확률 높음
             if s[-1] not in ".!?。？！\"”’）)】]…":
                 return True
-            # 자주 보이는 미완성 꼬리 패턴(원하면 더 추가 가능)
             if s.endswith("이 연구는") or s.endswith("본 연구는"):
                 return True
             return False
 
-        # ✅ 끊김 감지되면 이어쓰기(continue)로 1~2회 추가 호출
         tries = 0
         while tries < max_retries and looks_truncated(translated):
             tries += 1
@@ -469,28 +421,17 @@ Already translated:
 Original text:
 {text}
 """
-            debug_log("Translation continuation prompt (preview)", continuation_prompt[:1200])
-
             cont_resp = llm.invoke(continuation_prompt)
             cont = (cont_resp.content or "").strip()
 
-            # continuation이 비거나 똑같으면 중단
             if not cont or cont in translated:
                 break
 
             translated = (translated.rstrip() + " " + cont.lstrip()).strip()
 
-        debug_log("Translation output", {
-            "len_chars": len(translated),
-            "head": translated[:600],
-            "tail": translated[-200:] if len(translated) > 200 else translated,
-            "continued_calls": tries
-        })
-
         return translated
 
     except Exception as e:
-        debug_log("Translation exception", str(e))
         return f"⚠️ Gemini translation failed: {e}"
 
 
@@ -500,7 +441,7 @@ def summarize_then_translate_if_needed(
     max_new_tokens: int,
     temperature: float,
     top_p: float,
-    ui_lang_display: str,     # "English" / "Korean"
+    ui_lang_display: str,
     gemini_api_key: str | None,
     enable_translation: bool,
 ) -> str:
@@ -521,7 +462,6 @@ def summarize_then_translate_if_needed(
     if summary.startswith("⚠️"):
         return summary
 
-    # Korean 선택 + 번역 활성화면 번역
     if ui_lang_display == "Korean" and enable_translation:
         if not gemini_api_key:
             return "⚠️ Korean output requires Gemini API Key for translation."
@@ -532,6 +472,88 @@ def summarize_then_translate_if_needed(
         return translated
 
     return summary
+
+
+# ================================
+# 📰 News Brief (Template + Korean-only translation)  ✅ FIXED
+# ================================
+def build_news_script_template_en(papers: List[Dict], summaries_en: List[str]) -> str:
+    """
+    고정 포맷:
+    오프닝 1문장 → 논문1/2/3 한 문단씩 → 클로징 1문장
+    """
+    lines = []
+    lines.append("Here’s your quick AI paper news brief with three highlights.")
+    for i, (p, s) in enumerate(zip(papers, summaries_en), start=1):
+        title = _clean_whitespace(p.get("title", f"Paper {i}"))
+        s = _clean_whitespace(s)
+        lines.append(f"{i}) {title}\n{s}")
+    lines.append("That’s it for today—check the paper links if you want the full details.")
+    return "\n\n".join(lines).strip()
+
+
+def make_news_script_translate_only(
+    selected_papers: List[Dict],
+    llm_local: Llama,
+    max_new_tokens: int,
+    temperature: float,
+    top_p: float,
+    ui_lang_display: str,      # "English" / "Korean"
+    gemini_api_key: str | None,
+    enable_translation: bool,
+    progress_cb=None,          # progress_cb(msg: str, step: int, total: int)
+) -> str:
+    """
+    - 3개 논문 abstract 요약(영문) 3회
+    - 오프닝/클로징 포함 템플릿 스크립트 생성(영문)
+    - ✅ Korean일 때만 번역
+    - 진행상태: msg + (step/total)
+    """
+    if not selected_papers:
+        return "⚠️ No papers selected."
+    if llm_local is None:
+        return "⚠️ Model not loaded"
+
+    papers = selected_papers[:3]
+    total_steps = 3 + (1 if (ui_lang_display == "Korean" and enable_translation) else 0)
+
+    summaries_en: List[str] = []
+    for idx, p in enumerate(papers, start=1):
+        title = _clean_whitespace(p.get("title", f"Paper {idx}"))
+        if callable(progress_cb):
+            progress_cb(f"{idx}/3 요약 추론중... — {title}", idx, total_steps)
+
+        abs_text = (p.get("abstract") or "").strip()
+        if not abs_text:
+            summaries_en.append("⚠️ Missing abstract.")
+            continue
+
+        s = summarize_with_gguf(
+            abs_text,
+            llm_local,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            top_p=top_p,
+        )
+        summaries_en.append(_clean_whitespace(s))
+
+    script_en = build_news_script_template_en(papers, summaries_en)
+
+    # Korean일 때만 번역
+    if ui_lang_display == "Korean" and enable_translation:
+        if not gemini_api_key:
+            return "⚠️ Korean output requires Gemini API Key for translation."
+
+        if callable(progress_cb):
+            progress_cb("한-영 번역중...", 4, total_steps)  # 요청 문구 그대로
+
+        translated = translate_with_gemini(script_en, gemini_api_key, target_lang="Korean")
+        if translated.startswith("⚠️"):
+            return f"{translated}\n\n---\n(English script)\n{script_en}"
+        return translated.strip()
+
+    return script_en.strip()
+
 
 
 # ================================
@@ -555,7 +577,6 @@ def text_to_speech(text: str, lang_code: str = "en") -> str:
         return ""
 
 
-# ✅ (추가) autoplay 변환: 준비되면 즉시 재생하도록
 def enable_autoplay(audio_html: str) -> str:
     if not audio_html:
         return ""
@@ -668,7 +689,7 @@ if use_local_model and not st.session_state.model_loaded:
         st.session_state.model_loaded = True
 
 
-# ✅ (추가) rerun 직후 autoplay 오디오가 있으면 먼저 재생 (플레이어 준비되면 바로 재생)
+# ✅ rerun 직후 autoplay 오디오가 있으면 먼저 재생
 if enable_tts and st.session_state.autoplay_audio_html:
     st.markdown(enable_autoplay(st.session_state.autoplay_audio_html), unsafe_allow_html=True)
     st.session_state.autoplay_audio_html = None
@@ -678,14 +699,6 @@ if enable_tts and st.session_state.autoplay_audio_html:
 # ================================
 # 최신 AI 논문 몇개 가져오기 (Streamlit UX 개선)
 # ================================
-
-# 세션 상태 (저장된 최신 논문 블롭)
-if "latest_papers_blob" not in st.session_state:
-    st.session_state.latest_papers_blob = ""
-if "latest_papers_items" not in st.session_state:
-    st.session_state.latest_papers_items = []
-
-# 사이드바에 논문 가져오기 옵션 추가(원하면 유지)
 with st.sidebar:
     st.markdown("---")
     st.header("🧠 Latest Papers")
@@ -699,9 +712,11 @@ with st.sidebar:
     delimiter = st.text_input("Delimiter", value="\\n|\\n")
     st.caption("Tip: 최근 7일은 인용수가 거의 없을 수 있어요. 그래도 가능하면 citation으로 정렬 후, 실패 시 최신순 fallback됩니다.")
 
-# UI 영역
+
 st.subheader("🗞️ Latest AI Papers (arXiv)")
-cols = st.columns([1, 1, 2])
+
+# ✅ FIX: news_btn always enabled + auto-fetch on click
+cols = st.columns([1, 1, 1, 2])
 
 with cols[0]:
     fetch_btn = st.button("📌 Fetch papers", use_container_width=True)
@@ -710,7 +725,11 @@ with cols[1]:
     send_btn = st.button("➡️ Send to chat", use_container_width=True, disabled=(not st.session_state.latest_papers_blob))
 
 with cols[2]:
-    st.caption("Fetch → (optional) citation sort → pipe-joined abstracts. Then send to chat to summarize.")
+    news_btn = st.button("📰 Make News Brief", use_container_width=True)  # ✅ always enabled
+
+with cols[3]:
+    st.caption("Fetch → top3 → summarize 3x → template script → (Korean only) translate → (optional) TTS autoplay")
+
 
 # Fetch 실행
 if fetch_btn:
@@ -722,7 +741,7 @@ if fetch_btn:
                 query=fetch_query.strip(),
                 max_candidates=50,
                 prefer_citations=prefer_citations,
-                delimiter=delimiter.encode("utf-8").decode("unicode_escape")  # "\n|\n" 형태 처리
+                delimiter=delimiter.encode("utf-8").decode("unicode_escape")
             )
 
             if not blob.strip():
@@ -734,6 +753,7 @@ if fetch_btn:
         except Exception as e:
             st.error(f"❌ Fetch failed: {e}")
 
+
 # 결과 표시(항상)
 if st.session_state.latest_papers_blob:
     st.text_area(
@@ -742,7 +762,6 @@ if st.session_state.latest_papers_blob:
         height=320
     )
 
-    # 추가 정보(선택)
     with st.expander("Show metadata"):
         for p in st.session_state.latest_papers_items:
             st.write({
@@ -753,6 +772,7 @@ if st.session_state.latest_papers_blob:
                 "title": p.get("title"),
             })
 
+
 # Send to chat 실행
 if send_btn and st.session_state.latest_papers_blob:
     st.session_state.messages.append({
@@ -760,6 +780,84 @@ if send_btn and st.session_state.latest_papers_blob:
         "content": st.session_state.latest_papers_blob
     })
     st.rerun()
+
+
+# ✅ Make News Brief 실행: papers 없으면 자동 fetch 후 생성
+if news_btn:
+    status_slot = st.empty()     # 텍스트 상태
+    bar_slot = st.empty()        # progress bar
+    progress_bar = bar_slot.progress(0)
+
+    status_slot.info("Creating news brief (3 summaries + template + optional KO translation)...")
+
+    def _progress(msg: str, step: int, total: int):
+        # step: 1..total
+        status_slot.info(msg)
+        pct = int((step / max(total, 1)) * 100)
+        progress_bar.progress(min(max(pct, 0), 100))
+
+    try:
+        # papers 없으면 자동 fetch
+        if not st.session_state.latest_papers_items:
+            status_slot.info("🔎 No fetched papers yet. Auto-fetching top papers...")
+            blob, items = get_top_recent_papers_pipe_string(
+                days=int(fetch_days),
+                top_k=int(fetch_top_k),
+                query=fetch_query.strip(),
+                max_candidates=50,
+                prefer_citations=prefer_citations,
+                delimiter=delimiter.encode("utf-8").decode("unicode_escape")
+            )
+            st.session_state.latest_papers_blob = blob or ""
+            st.session_state.latest_papers_items = items or []
+
+        if not st.session_state.latest_papers_items:
+            status_slot.empty()
+            bar_slot.empty()
+            st.warning("⚠️ No papers available. Try Fetch papers or adjust query/days.")
+            st.stop()
+
+        if use_local_model and st.session_state.llm:
+            selected = st.session_state.latest_papers_items[:3]
+            script = make_news_script_translate_only(
+                selected_papers=selected,
+                llm_local=st.session_state.llm,
+                max_new_tokens=max_new_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                ui_lang_display=lang_display,
+                gemini_api_key=gemini_api_key,
+                enable_translation=enable_translation,
+                progress_cb=_progress,
+            )
+        else:
+            script = "⚠️ No local GGUF model available. Please load GGUF."
+
+        # TTS 생성 + autoplay
+        audio_html = ""
+        if enable_tts and script and not script.startswith("⚠️"):
+            status_slot.info("🔊 TTS generating...")
+            progress_bar.progress(100)
+
+            audio_html = text_to_speech(script, gtts_lang)
+            st.session_state.autoplay_audio_html = audio_html
+
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": script + "\n",
+            "audio_html": audio_html
+        })
+
+        # ✅ 완료 → 상태/바 제거
+        status_slot.empty()
+        bar_slot.empty()
+        st.rerun()
+
+    except Exception as e:
+        status_slot.empty()
+        bar_slot.empty()
+        st.error(f"❌ News brief failed: {e}")
+
 
 
 # ================================
@@ -814,11 +912,10 @@ if enable_stt:
                 else:
                     summary = "⚠️ No local GGUF model available. Please load GGUF."
 
-            # ✅ TTS 생성해서 히스토리에 저장 + autoplay 예약
             audio_html = ""
             if enable_tts and summary and not summary.startswith("⚠️"):
                 audio_html = text_to_speech(summary, gtts_lang)
-                st.session_state.autoplay_audio_html = audio_html  # ✅ (추가) 다음 rerun에서 자동 재생
+                st.session_state.autoplay_audio_html = audio_html
 
             st.session_state.messages.append({
                 "role": "assistant",
@@ -855,11 +952,10 @@ if prompt:
         else:
             summary = "⚠️ No local GGUF model available. Please load GGUF."
 
-    # ✅ TTS 생성해서 히스토리에 저장 + autoplay 예약
     audio_html = ""
     if enable_tts and summary and not summary.startswith("⚠️"):
         audio_html = text_to_speech(summary, gtts_lang)
-        st.session_state.autoplay_audio_html = audio_html  # ✅ (추가) 다음 rerun에서 자동 재생
+        st.session_state.autoplay_audio_html = audio_html
 
     st.session_state.messages.append({
         "role": "assistant",
