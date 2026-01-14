@@ -388,13 +388,13 @@ ArXiv-NewsBrief-1.5B-2k-v4.2/
 │   ├── analysis/
 │   ├── evaluation/
 │   └── training/
-│
+│   └── REPORT.md                     # ArXiv-NewsBrief v4.2 프로젝트 발표자료
 ├── ArXiv-NewsBrief-Q4.2_K_M.gguf     # ⭐ CPU 모델
 │
 ├── dataset_generator.py               # 데이터 생성
 ├── sft_train_data.py                 # 학습
 ├── sft_merge_gguf.py                 # 병합+GGUF
-├── web_summary.py                     # 🌐 웹 챗봇
+├── web.py                            # 🌐 웹 챗봇
 │
 ├── pyproject.toml                     # 의존성
 ├── uv.lock                            # 버전 고정
